@@ -7,7 +7,7 @@ The project is built around the design ideas from *A Philosophy of Software Desi
 
 ## Demo
 
-[Watch the demo video](docs/media/demovideo.mp4)
+![Sorting Visualizer demo](docs/media/demovideo.gif)
 
 ## Build And Run
 

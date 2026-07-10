@@ -2,6 +2,8 @@
 
 #include "domain/SortState.hpp"
 
+#include <raylib.h>
+
 // Renderer boundary.
 //
 // The renderer draws an already-built SortState. It should not generate input,
@@ -10,5 +12,5 @@ class RaylibRenderer {
 public:
     // Read SortState, map ItemVisualState to colors, calculate bar positions,
     // and draw bars using raylib. App owns BeginDrawing()/EndDrawing().
-    void drawSortState(const SortState& state) const;    
+    void drawSortState(const SortState& state, Rectangle chartBounds) const;    
 };

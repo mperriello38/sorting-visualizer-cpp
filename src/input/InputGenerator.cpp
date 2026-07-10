@@ -97,40 +97,11 @@ std::vector<int> sampleWithReplacement(
 
 
 // =================================================================================
-// Overloaded functions to generate input values
-// 
-// Since I am not familiar with C++ here's some information:
+// Value generation overloads
 //
-// In C++ functions can be overloaded. This means multiple functions can share
-// the same name, in this case generateValuesFromSpec.
-//
-// This works because while all the functions share the same name and return type (vector<int>),
-// the first input is a different data type for each instance of the function.
-// So, there is a function which expects an input of PermutationValueSpec, one which
-// expects RangeValueSpec, etc. (all the structs are in domain/SortSpec.hpp)
-//
-// This is helpful because it lets us use the visit command. Using this command we
-// can turn a function call "generateValuesFromSpec(...)" into one which visits the
-// version of the overloaded function which accepts the datatype we chose to input.
-// So if we are calling the function with an input type PermutationValueSpec, the
-// version of the function which handles that type is called.
-//
-// Note:
-//
-// To do this, each instance of the function needs the same interface... that is,
-// they need to expect the same inputs. In this case it expects a valueSpec, an
-// itemCount, and a generator. However, some of the instances of generateValuesFromSpec
-// do not actually use all three inputs. To get around this, we simply declare the
-// input and do not assign it a variable.
-//
-// EX:
-// 
-// "std::mt19937&" does NOT assign a variable but "std::mt19937& generator" DOES.
-//
-// "const RangeValueSpec& valueSpec" means:
-// - RangeValueSpec: the type of object this overload handles
-// - &: pass by reference, so the function does not copy the whole object
-// - const: this function is not allowed to modify valueSpec
+// Each ValueSpec type has a matching generateValuesFromSpec overload with the
+// same interface. std::visit dispatches to the correct overload for the active
+// ValueSpec while keeping the public input API to a single generateInput call.
 // =================================================================================
 
 // Generates the permutation value set: 1, 2, 3, ..., itemCount.

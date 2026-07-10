@@ -37,46 +37,9 @@ Color colorForVisualState(ItemVisualState visualState)
     return DARKGRAY;
 }
 
-Rectangle calculateChartBounds()
-{
-    // These margins reserve space for the title, playback text, and future UI.
-    // They are renderer-private layout policy: App should not need to know where
-    // the chart begins or how much space is left around it.
-    //
-    // Design warning: these margins currently line up with app-level text drawn
-    // in App.cpp. If the UI becomes a real panel system, pass a deliberate chart
-    // rectangle or layout object instead of growing hidden margin agreements.
-    const float leftMargin = 60.0f;
-    const float rightMargin = 60.0f;
-    const float topMargin = 380.0f;
-    const float bottomMargin = 380.0f;
-
-    // Keep the chart dimensions positive even if the window is made very small.
-    // This prevents invalid bar-width math later in drawSortState().
-    const float minimumChartWidth = 1.0f;
-    const float minimumChartHeight = 1.0f;
-
-    const float screenWidth = static_cast<float>(GetScreenWidth());
-    const float screenHeight = static_cast<float>(GetScreenHeight());
-    const float chartWidth = std::max(
-        minimumChartWidth,
-        screenWidth - leftMargin - rightMargin);
-
-    const float chartHeight = std::max(
-        minimumChartHeight,
-        screenHeight - topMargin - bottomMargin);
-
-    return Rectangle{
-        leftMargin,
-        topMargin,
-        chartWidth,
-        chartHeight
-    };
 }
 
-}
-
-void RaylibRenderer::drawSortState(const SortState& state) const
+void RaylibRenderer::drawSortState(const SortState& state, Rectangle chartBounds) const
 {
     // App owns BeginDrawing(), ClearBackground(), and EndDrawing().
     // This function assumes raylib is already inside an active drawing frame.
@@ -97,9 +60,10 @@ void RaylibRenderer::drawSortState(const SortState& state) const
         maxValue = std::max(maxValue, itemState.item.value);
     }
 
-    // The renderer owns chart layout. The app can resize the window or later
-    // change item counts without needing to know this geometry.
-    const Rectangle chart = calculateChartBounds();
+    // The app owns the chart rectangle because app-level controls and status
+    // panels decide how screen space is reserved. The renderer only converts
+    // SortState items into bars inside that rectangle.
+    const Rectangle chart = chartBounds;
     const float chartBottom = chart.y + chart.height;
 
     // Draw the chart outline so it is clear where the plotting area is.

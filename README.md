@@ -2,7 +2,7 @@
 
 A realtime sorting algorithm visualizer written in C++ with raylib.
 
-The project is being built with a strong emphasis on the design ideas from *A Philosophy of Software Design*: keep interfaces simple, keep implementation details hidden, and avoid shallow modules that add names without removing complexity.
+The project is built around the design ideas from *A Philosophy of Software Design*: explicit module boundaries, narrow public interfaces, and clear ownership of domain, input generation, sorting, animation, rendering, and app responsibilities. The current implementation focuses on the core architecture and a keyboard-driven UI, with custom controls and more algorithms planned.
 
 ## Build And Run
 
@@ -192,11 +192,14 @@ Backward stepping and future timeline controls should use
 
 Draws the current `SortState` with raylib.
 
-Rendering owns colors, layout, labels, bars, and other visual decisions. It should not know how sorting algorithms work.
+Rendering owns chart drawing: colors, bars, and pixel geometry inside an
+app-provided chart rectangle. App-level labels, panels, and window layout stay
+in `app`. Rendering should not know how sorting algorithms work.
 
-The current renderer calculates a chart area from the current window size using
-renderer-owned margins. A small configuration object should be added only if
-those margins become painful to keep private.
+The app currently owns the high-level layout rectangles because controls,
+settings text, and future mouse hit boxes all compete for screen space. The
+renderer receives the chart rectangle and focuses on drawing `SortState` bars
+inside it.
 
 ### `app`
 
@@ -320,9 +323,10 @@ Before adding code to a file, ask:
    - buttons for algorithm, value-spec, initial-order, play/pause, reset, and apply
    - an item-count slider that edits `draftSettings` and marks settings dirty
    - later controls for seed, range values, unique-count, period length, and nearly-ascending disorder
-3. Make the layout boundary explicit when hard-coded positions become painful:
-   - keep renderer-owned chart geometry private while the UI is simple
-   - pass a chart rectangle or layout object only when app panels need deliberate space
+3. Continue refining the app layout boundary:
+   - keep app-owned panel rectangles explicit
+   - keep layout debug drawing disabled by default
+   - pass only the chart rectangle into the renderer for now
    - keep raylib drawing at the `app`/`rendering` edge
 4. Keep playback policy responsive:
    - tune the per-frame event cap empirically

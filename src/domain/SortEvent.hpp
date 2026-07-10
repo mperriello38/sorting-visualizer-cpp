@@ -2,7 +2,7 @@
 
 #include "SortItem.hpp"
 
-#include <variant>      // Gives access to std::variant, which says "this value is one of several possible types."
+#include <variant>
 
 // Sorting algorithms do not mutate the visualizer directly.
 // Instead, they emit a list of events. The animation layer replays those events later.
@@ -52,7 +52,6 @@ struct SwapEvent {
 // Place movedItem at destinationIndex.
 // This supports algorithms such as insertion sort and merge sort where a step is
 // not naturally described as "swap these two indices."
-// movedItem is a member of MoveEvent. In C++ wording: MoveEvent has a SortItem member.
 struct MoveEvent {
     int destinationIndex;
     SortItem movedItem;
@@ -64,8 +63,7 @@ struct MarkSortedEvent {
     int index;
 };
 
-// Create a type alias, SortEvent, for a variant which can hold exactly one event struct at a time.
-// A SortEvent is one of: CompareEvent, SwapEvent, MoveEvent, or MarkSortedEvent.
+// A SortEvent is exactly one event shape.
 using SortEvent = std::variant<
     CompareEvent,
     SwapEvent,

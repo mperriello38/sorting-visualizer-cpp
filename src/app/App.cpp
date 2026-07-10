@@ -24,7 +24,7 @@ namespace {
 
     // Private app state for the current keyboard-driven UI.
     //
-    // Design warning: this is still small enough to keep in App.cpp. If settings,
+    // Design note: this is still small enough to keep in App.cpp. If settings,
     // playback, and drawing each grow their own rules, split those concepts
     // deliberately instead of letting AppState become a grab bag.
     struct AppState {
@@ -37,7 +37,7 @@ namespace {
     };
 
     // App-level policy constants. Keeping these named makes it clearer which
-    // numbers are temporary UI/playback choices rather than domain rules.
+    // numbers are UI/playback choices rather than domain rules.
     constexpr unsigned int minimumItemCount = 1;
     constexpr unsigned int maximumItemCount = 1000;
     constexpr unsigned int maximumFewUniqueDefaultCount = 5;
@@ -47,6 +47,7 @@ namespace {
     constexpr float secondsPerEventStep = 0.005f;
 
     constexpr unsigned int maximumEventsPerFrame = 50;
+    constexpr bool showLayoutDebug = false;
 
 // =================================================================================
 // Display-name helpers
@@ -205,8 +206,8 @@ namespace {
     void keepDraftValueSpecCompatibleWithItemCount(AppState& state)
     {
         // FewUniqueValueSpec is currently the only value spec whose validity
-        // depends on itemCount. For the temporary keyboard UI, "Few Unique"
-        // means values come from 1..itemCount with at most five unique values.
+        // depends on itemCount. In the keyboard-driven UI, "Few Unique" means
+        // values come from 1..itemCount with at most five unique values.
         // Keep those derived fields synchronized when itemCount changes so the
         // draft spec cannot quietly preserve an old range.
         if (FewUniqueValueSpec* valueSpec =
@@ -374,9 +375,9 @@ namespace {
 
         if (IsKeyPressed(KEY_FIVE)) {
             // FewUniqueValueSpec needs a valid range and a valid unique count.
-            // These are temporary app-level defaults for the keyboard UI, not
-            // input-layer rules. uniqueValueCount is clamped to itemCount so
-            // small inputs still produce a valid spec.
+            // These are app-level defaults for the keyboard UI, not input-layer
+            // rules. uniqueValueCount is clamped to itemCount so small inputs
+            // still produce a valid spec.
             const unsigned int itemCount = state.draftSettings.inputSpec.itemCount;
             const unsigned int uniqueValueCount =
                 itemCount < maximumFewUniqueDefaultCount
@@ -498,158 +499,397 @@ namespace {
         }
     }
 
-    Rectangle calculateAppLayout(const int& screenwidth, const int& screenheight)
+    struct AppLayout {
+        Rectangle headerBounds;
+        Rectangle titleBounds;
+        Rectangle controlsBounds;
+        Rectangle playbackStatusBounds;
+        Rectangle chartBounds;
+        Rectangle footerBounds;
+    };
+    AppLayout calculateAppLayout(int screenWidth, int screenHeight)
     {
-        // Header / Control Area
-        // Roughly 10% of screen height
+
+        const float width = static_cast<float>(screenWidth);
+        const float height = static_cast<float>(screenHeight);
+
+        float padding = 24.0f;
+
+        // Header area.
+        // Roughly 15% of screen height.
+        float headerWidth = width - 2.0f * padding;
+        float headerHeight = 0.15f * height - padding;
+        Rectangle header = {padding, padding, headerWidth, headerHeight};
+
+        // Header subdivision.
+        // The title gets the left side. The right side is split vertically so
+        // controls and playback status do not rely on a hidden agreement about
+        // which part of the header is safe to use.
+        float titleWidth = 0.25f * headerWidth;
+        Rectangle title = {header.x, header.y, titleWidth, headerHeight};
+
+        float controlsWidth = headerWidth - titleWidth ;
+        float controlsHeight = 0.70f * headerHeight;
+        Rectangle controls = {
+            header.x + titleWidth,
+            header.y,
+            controlsWidth,
+            controlsHeight
+        };
+
+        Rectangle playbackStatus = {
+            controls.x,
+            controls.y + controls.height,
+            controls.width,
+            headerHeight - controlsHeight
+        };
+
+        // Footer / Status-settings area.
+        // Roughly 15% of screen height.
+        float footerWidth = width - 2.0f * padding;
+        float footerHeight = 0.15f * height - padding;
+        Rectangle footer = {padding, height - footerHeight - padding, footerWidth, footerHeight};
 
         // Chart area
         // Header and footer determine chart height
-        // Left and right margines determine chart width
+        // Left and right padding determine chart width.
+        float chartY = header.y + header.height + padding;
+        float chartBottom = footer.y - padding;
+        float chartHeight = chartBottom - chartY;
+        float chartWidth = width - 2.0f * padding;
 
-        // Footer / Status-settings Area
-        // Roughly 5% of screen height
+        Rectangle chart = {padding, chartY, chartWidth, chartHeight};
+
+        return AppLayout{header, title, controls, playbackStatus, chart, footer};
     }
 
-    void drawControls()
+    void drawTitle(Rectangle titleBounds)
     {
-        DrawText("Controls:", 345, 50, 15, DARKGRAY);
+        const char* titleText = "Sorting Visualizer";
 
-        DrawText("Pause:", 417, 54, 10, DARKGRAY);
-        DrawText("SPACE", 454, 54, 10, BLUE);
+        // Start from the title area's height, but leave vertical breathing room.
+        // raylib's font size is not exactly "text height in pixels", so using
+        // the full rectangle height tends to make the title look cramped.
+        int fontSize = static_cast<int>(titleBounds.height * 0.85f);
+        fontSize = std::clamp(fontSize, 18, 96);
 
-        DrawText("Back:", 499, 54, 10, DARKGRAY);
-        DrawText("LEFT", 532, 54, 10, BLUE);
+        // Height chooses the first guess. Width gets the final veto so the
+        // title cannot spill into the controls area on narrower windows.
+        while (fontSize > 1 && MeasureText(titleText, fontSize) > titleBounds.width) {
+            --fontSize;
+        }
 
-        DrawText("Forward:", 574, 54, 10, DARKGRAY);
-        DrawText("RIGHT", 625, 54, 10, BLUE);
+        // Vertically center the title inside its rectangle. This keeps the title
+        // anchored to the layout box instead of to a guessed pixel coordinate.
+        const float textHeight = static_cast<float>(fontSize);
+        const int textX = static_cast<int>(titleBounds.x);
+        const int textY = static_cast<int>(
+            titleBounds.y + (titleBounds.height - textHeight) / 2.0f);
 
-        DrawText("Speed +:", 668, 54, 10, DARKGRAY);
-        DrawText("UP", 714, 54, 10, BLUE);
-
-        DrawText("Speed -:", 742, 54, 10, DARKGRAY);
-        DrawText("DOWN", 790, 54, 10, BLUE);
-
-        DrawText("Reset:", 835, 54, 10, DARKGRAY);
-        DrawText("R", 871, 54, 10, BLUE);
-
-        DrawText("Item -:", 417, 74, 10, DARKGRAY);
-        DrawText("A", 455, 74, 10, BLUE);
-
-        DrawText("Item +:", 499, 74, 10, DARKGRAY);
-        DrawText("D", 537, 74, 10, BLUE);
-
-        DrawText("Apply:", 574, 74, 10, DARKGRAY);
-        DrawText("ENTER", 615, 74, 10, BLUE);
-
-        DrawText("Bubble:", 680, 74, 10, DARKGRAY);
-        DrawText("1", 725, 74, 10, BLUE);
-
-        DrawText("Insertion:", 745, 74, 10, DARKGRAY);
-        DrawText("2", 807, 74, 10, BLUE);
-
-        DrawText("Selection:", 827, 74, 10, DARKGRAY);
-        DrawText("3", 887, 74, 10, BLUE);
-
-        DrawText("Values:", 499, 94, 10, DARKGRAY);
-        DrawText("4 Perm", 545, 94, 10, BLUE);
-        DrawText("5 Few", 600, 94, 10, BLUE);
-        DrawText("6 Equal", 648, 94, 10, BLUE);
-
-        DrawText("Order:", 715, 94, 10, DARKGRAY);
-        DrawText("7 Rand", 755, 94, 10, BLUE);
-        DrawText("8 Asc", 812, 94, 10, BLUE);
-        DrawText("9 Desc", 860, 94, 10, BLUE);
-        DrawText("0 Near", 920, 94, 10, BLUE);
+        DrawText(titleText, textX, textY, fontSize, DARKGRAY);
     }
 
-    void drawPlaybackStatus(const AppState& state)
+    float textYForRow(Rectangle row, int fontSize)
     {
+        // DrawText uses y as the top of the text. Centering inside a row means
+        // moving down by half of the unused vertical space.
+        return row.y + (row.height - static_cast<float>(fontSize)) / 2.0f;
+    }
+
+    Rectangle insetRectangle(Rectangle bounds, float padding)
+    {
+        // Create a smaller rectangle inside bounds. Drawing helpers use this so
+        // text does not sit directly on panel borders.
+        return Rectangle{
+            bounds.x + padding,
+            bounds.y + padding,
+            bounds.width - 2.0f * padding,
+            bounds.height - 2.0f * padding
+        };
+    }
+
+    float drawTextAndAdvance(const char* text, float x, float y, int fontSize, Color color, float spacing)
+    {
+        // Layout math is easier as float, but raylib's DrawText wants integer
+        // pixel coordinates. MeasureText returns the width of the drawn text,
+        // so the caller can continue drawing immediately after it.
+        DrawText(text, static_cast<int>(x), static_cast<int>(y), fontSize, color);
+        return x + static_cast<float>(MeasureText(text, fontSize)) + spacing;
+    }
+
+    float drawKeyHint(
+        const char* label,
+        const char* key,
+        float x,
+        float y,
+        int fontSize,
+        float labelSpacing,
+        float groupSpacing)
+    {
+        // Keyboard hints repeat the same visual rule everywhere: label in dark
+        // text, key in blue, then return the next x position.
+        x = drawTextAndAdvance(label, x, y, fontSize, DARKGRAY, labelSpacing);
+        x = drawTextAndAdvance(key, x, y, fontSize, BLUE, groupSpacing);
+        return x;
+    }
+
+    void drawLabelValue(
+        const char* label,
+        const char* value,
+        float x,
+        float y,
+        int fontSize,
+        Color valueColor)
+    {
+        // Status rows use label/value pairs rather than keyboard hints. This
+        // helper keeps footer drawing focused on what is displayed.
+        const float labelSpacing = static_cast<float>(fontSize) * 0.55f;
+
+        x = drawTextAndAdvance(label, x, y, fontSize, DARKGRAY, labelSpacing);
+        drawTextAndAdvance(value, x, y, fontSize, valueColor, 0.0f);
+    }
+
+    void drawControls(Rectangle controlsBounds)
+    {
+        const float padding = controlsBounds.height * 0.10f;
+        Rectangle innerBounds = insetRectangle(controlsBounds, padding);
+
+        float rowHeight = innerBounds.height / 3.0f;
+
+        Rectangle row1 = {innerBounds.x, innerBounds.y, innerBounds.width, rowHeight};
+        Rectangle row2 = {innerBounds.x, innerBounds.y + rowHeight, innerBounds.width, rowHeight};
+        Rectangle row3 = {innerBounds.x, innerBounds.y + 2 * rowHeight, innerBounds.width, rowHeight};
+
+        const int fontSize = std::clamp(static_cast<int>(rowHeight * 0.65f), 10, 48);
+
+        const float row1TextY = textYForRow(row1, fontSize);
+        const float row2TextY = textYForRow(row2, fontSize);
+        const float row3TextY = textYForRow(row3, fontSize);
+
+        float currentX = row1.x;
+
+        float smallSpacing = 20.0f;
+        float largeSpacing = 50.0f;
+        float hugeSpacing = 150.0f;
+
+        currentX = drawTextAndAdvance("Playback Controls:", currentX, row1TextY, fontSize, MAROON, largeSpacing);
+
+        currentX = drawKeyHint("Pause/Play:", "SPACE", currentX, row1TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Back:", "LEFT", currentX, row1TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Forward:", "RIGHT", currentX, row1TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Speed +:", "UP", currentX, row1TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Speed -:", "DOWN", currentX, row1TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Reset:", "R", currentX, row1TextY, fontSize, smallSpacing, largeSpacing);
+
+        currentX = row2.x;
+
+        currentX = drawTextAndAdvance("Run Setup:", currentX, row2TextY, fontSize, MAROON, largeSpacing);
+
+        currentX = drawKeyHint("Item -:", "A", currentX, row2TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Item +:", "D", currentX, row2TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Apply:", "ENTER", currentX, row2TextY, fontSize, smallSpacing, hugeSpacing);
+
+        currentX = drawTextAndAdvance("Algorithm Selection:", currentX, row2TextY, fontSize, MAROON, largeSpacing);
+
+        currentX = drawKeyHint("Bubble:", "1", currentX, row2TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Insertion:", "2", currentX, row2TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Selection:", "3", currentX, row2TextY, fontSize, smallSpacing, largeSpacing);
+
+        currentX = row3.x;
+
+        currentX = drawTextAndAdvance("Values:", currentX, row3TextY, fontSize, MAROON, largeSpacing);
+
+        currentX = drawKeyHint("Perm:", "4", currentX, row3TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Few:", "5", currentX, row3TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Equal:", "6", currentX, row3TextY, fontSize, smallSpacing, hugeSpacing);
+
+        currentX = drawTextAndAdvance("Order:", currentX, row3TextY, fontSize, MAROON, largeSpacing);
+
+        currentX = drawKeyHint("Rand:", "7", currentX, row3TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Asc:", "8", currentX, row3TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Desc:", "9", currentX, row3TextY, fontSize, smallSpacing, largeSpacing);
+        currentX = drawKeyHint("Near:", "0", currentX, row3TextY, fontSize, smallSpacing, largeSpacing);
+    }
+
+    void drawPlaybackStatus(const AppState& state, Rectangle playbackStatusBounds)
+    {
+        const float padding = playbackStatusBounds.height * 0.12f;
+        const Rectangle innerBounds = insetRectangle(playbackStatusBounds, padding);
+
+        const int fontSize = std::clamp(
+            static_cast<int>(innerBounds.height * 0.60f),
+            10,
+            32);
+
+        const float textY = textYForRow(innerBounds, fontSize);
+        const float smallSpacing = static_cast<float>(fontSize) * 0.70f;
+        const float largeSpacing = static_cast<float>(fontSize) * 2.0f;
+
+        const char* playbackText = "Paused";
+        Color playbackColor = RED;
+
         if (state.player.isComplete()) {
-            DrawText("Complete", 40, 90, 20, BLUE);
+            playbackText = "Complete";
+            playbackColor = BLUE;
         }
         else if (state.playback.playing) {
-            DrawText("Playing", 40, 90, 20, GREEN);
-        }
-        else {
-            DrawText("Paused", 40, 90, 20, RED);
+            playbackText = "Playing";
+            playbackColor = GREEN;
         }
 
-        DrawText("Seconds per Event:", 180, 90, 20, DARKGRAY);
-        DrawText(TextFormat("%.4f", state.playback.secondsPerEvent), 385, 90, 20, GREEN);
+        float currentX = innerBounds.x;
+
+        currentX = drawTextAndAdvance("Playback:", currentX, textY, fontSize, MAROON, largeSpacing);
+        currentX = drawTextAndAdvance(playbackText, currentX, textY, fontSize, playbackColor, largeSpacing);
+        currentX = drawTextAndAdvance("Seconds/Event:", currentX, textY, fontSize, DARKGRAY, smallSpacing);
+        currentX = drawTextAndAdvance(TextFormat("%.4f", state.playback.secondsPerEvent), currentX, textY, fontSize, GREEN, largeSpacing);
     }
 
-    void drawSettingsStatus(const AppState& state)
+    void drawSettingsStatus(const AppState& state, Rectangle footerBounds)
     {
-        DrawText("Loaded algorithm:", 40, 600, 18, DARKGRAY);
-        DrawText(
-            algorithmName(state.loadedSettings.algorithm),
-            205,
-            600,
-            18,
-            BLUE);
+        const float padding = footerBounds.height * 0.12f;
+        const Rectangle innerBounds = insetRectangle(footerBounds, padding);
 
-        DrawText("Draft algorithm:", 310, 600, 18, DARKGRAY);
-        DrawText(
-            algorithmName(state.draftSettings.algorithm),
-            465,
-            600,
-            18,
-            state.settingsDirty ? RED : GREEN);
+        // The footer is a status panel, not a control surface. Keep its local
+        // layout simple: loaded settings on the left, draft settings in the
+        // middle, and the apply/dirty message on the right.
+        const float columnGap = innerBounds.width * 0.035f;
+        const float messageColumnWidth = innerBounds.width * 0.28f;
+        const float settingsColumnWidth =
+            (innerBounds.width - messageColumnWidth - 2.0f * columnGap) / 2.0f;
 
-        DrawText("Loaded values:", 40, 620, 18, DARKGRAY);
-        DrawText(
-            valueSpecName(state.loadedSettings.inputSpec.valueSpec),
-            205,
-            620,
-            18,
-            BLUE);
+        const Rectangle loadedColumn = {
+            innerBounds.x,
+            innerBounds.y,
+            settingsColumnWidth,
+            innerBounds.height
+        };
 
-        DrawText("Draft values:", 310, 620, 18, DARKGRAY);
-        DrawText(
-            valueSpecName(state.draftSettings.inputSpec.valueSpec),
-            465,
-            620,
-            18,
-            state.settingsDirty ? RED : GREEN);
+        const Rectangle draftColumn = {
+            loadedColumn.x + loadedColumn.width + columnGap,
+            innerBounds.y,
+            settingsColumnWidth,
+            innerBounds.height
+        };
 
-        DrawText("Loaded order:", 40, 640, 18, DARKGRAY);
-        DrawText(
-            orderSpecName(state.loadedSettings.inputSpec.initialOrderSpec),
-            205,
-            640,
-            18,
-            BLUE);
+        const Rectangle messageColumn = {
+            draftColumn.x + draftColumn.width + columnGap,
+            innerBounds.y,
+            messageColumnWidth,
+            innerBounds.height
+        };
 
-        DrawText("Draft order:", 310, 640, 18, DARKGRAY);
-        DrawText(
-            orderSpecName(state.draftSettings.inputSpec.initialOrderSpec),
-            465,
-            640,
-            18,
-            state.settingsDirty ? RED : GREEN);
+        const float rowHeight = innerBounds.height / 4.0f;
+        const int fontSize = std::clamp(
+            static_cast<int>(rowHeight * 0.68f),
+            10,
+            28);
 
-        DrawText("Loaded item count:", 40, 660, 18, DARKGRAY);
-        DrawText(
-            TextFormat("%u", state.loadedSettings.inputSpec.itemCount),
-            215,
-            660,
-            18,
-            BLUE);
+        const Color draftColor = state.settingsDirty ? RED : GREEN;
 
-        DrawText("Draft item count:", 310, 660, 18, DARKGRAY);
-        DrawText(
-            TextFormat("%u", state.draftSettings.inputSpec.itemCount),
-            465,
-            660,
-            18,
-            state.settingsDirty ? RED : GREEN);
+        for (int rowIndex = 0; rowIndex < 4; ++rowIndex) {
+            const Rectangle row = {
+                innerBounds.x,
+                innerBounds.y + static_cast<float>(rowIndex) * rowHeight,
+                innerBounds.width,
+                rowHeight
+            };
+
+            const float rowTextY = textYForRow(row, fontSize);
+
+            if (rowIndex == 0) {
+                drawLabelValue(
+                    "Loaded algorithm:",
+                    algorithmName(state.loadedSettings.algorithm),
+                    loadedColumn.x,
+                    rowTextY,
+                    fontSize,
+                    BLUE);
+
+                drawLabelValue(
+                    "Draft algorithm:",
+                    algorithmName(state.draftSettings.algorithm),
+                    draftColumn.x,
+                    rowTextY,
+                    fontSize,
+                    draftColor);
+            }
+            else if (rowIndex == 1) {
+                drawLabelValue(
+                    "Loaded values:",
+                    valueSpecName(state.loadedSettings.inputSpec.valueSpec),
+                    loadedColumn.x,
+                    rowTextY,
+                    fontSize,
+                    BLUE);
+
+                drawLabelValue(
+                    "Draft values:",
+                    valueSpecName(state.draftSettings.inputSpec.valueSpec),
+                    draftColumn.x,
+                    rowTextY,
+                    fontSize,
+                    draftColor);
+            }
+            else if (rowIndex == 2) {
+                drawLabelValue(
+                    "Loaded order:",
+                    orderSpecName(state.loadedSettings.inputSpec.initialOrderSpec),
+                    loadedColumn.x,
+                    rowTextY,
+                    fontSize,
+                    BLUE);
+
+                drawLabelValue(
+                    "Draft order:",
+                    orderSpecName(state.draftSettings.inputSpec.initialOrderSpec),
+                    draftColumn.x,
+                    rowTextY,
+                    fontSize,
+                    draftColor);
+            }
+            else {
+                drawLabelValue(
+                    "Loaded item count:",
+                    TextFormat("%u", state.loadedSettings.inputSpec.itemCount),
+                    loadedColumn.x,
+                    rowTextY,
+                    fontSize,
+                    BLUE);
+
+                drawLabelValue(
+                    "Draft item count:",
+                    TextFormat("%u", state.draftSettings.inputSpec.itemCount),
+                    draftColumn.x,
+                    rowTextY,
+                    fontSize,
+                    draftColor);
+            }
+        }
+
+        const int messageFontSize = std::clamp(
+            static_cast<int>(messageColumn.height * 0.18f),
+            10,
+            28);
+        const float messageY = textYForRow(messageColumn, messageFontSize);
 
         if (state.settingsDirty) {
-            DrawText("Settings changed: press ENTER to apply", 560, 680, 18, RED);
+            drawTextAndAdvance(
+                "Settings changed: press ENTER to apply",
+                messageColumn.x,
+                messageY,
+                messageFontSize,
+                RED,
+                0.0f);
         }
         else {
-            DrawText("Settings applied", 560, 680, 18, GREEN);
+            drawTextAndAdvance(
+                "Settings applied",
+                messageColumn.x,
+                messageY,
+                messageFontSize,
+                GREEN,
+                0.0f);
         }
     }
 
@@ -658,7 +898,7 @@ namespace {
     // This is still app-level drawing, not renderer internals: it draws title,
     // controls, and status text, then asks RaylibRenderer to draw the SortState.
     //
-    // Design warning: this helper is allowed to know app status text, but it
+    // Design note: this helper is allowed to know app status text, but it
     // should not grow into custom UI widgets. If the controls become interactive
     // mouse elements, move that behavior behind smaller helpers instead of adding
     // more logic here.
@@ -668,13 +908,31 @@ namespace {
 
         ClearBackground(RAYWHITE);
 
-        DrawText("Sorting Visualizer", 40, 40, 32, DARKGRAY);
+        AppLayout layout = calculateAppLayout(GetScreenWidth(), GetScreenHeight());
 
-        drawControls();
-        drawPlaybackStatus(state);
-        drawSettingsStatus(state);
+        if (showLayoutDebug) {
+            DrawRectangleRec(layout.headerBounds, Fade(LIGHTGRAY, 0.35f));
+            DrawRectangleRec(layout.titleBounds, Fade(RED, 0.35f));
+            DrawRectangleRec(layout.controlsBounds, Fade(PURPLE, 0.35f));
+            DrawRectangleRec(layout.playbackStatusBounds, Fade(ORANGE, 0.30f));
+            DrawRectangleRec(layout.chartBounds, Fade(SKYBLUE, 0.25f));
+            DrawRectangleRec(layout.footerBounds, Fade(BEIGE, 0.35f));
 
-        renderer.drawSortState(state.player.currentState());
+            DrawRectangleLinesEx(layout.headerBounds, 2.0f, GRAY);
+            DrawRectangleLinesEx(layout.titleBounds, 2.0f, RED);
+            DrawRectangleLinesEx(layout.controlsBounds, 2.0f, PURPLE);
+            DrawRectangleLinesEx(layout.playbackStatusBounds, 2.0f, ORANGE);
+            DrawRectangleLinesEx(layout.chartBounds, 2.0f, BLUE);
+            DrawRectangleLinesEx(layout.footerBounds, 2.0f, BROWN);
+        }
+
+        drawTitle(layout.titleBounds);
+
+        drawControls(layout.controlsBounds);
+        drawPlaybackStatus(state, layout.playbackStatusBounds);
+        drawSettingsStatus(state, layout.footerBounds);
+
+        renderer.drawSortState(state.player.currentState(), layout.chartBounds);
 
         EndDrawing();
     }
@@ -682,10 +940,12 @@ namespace {
 
 void App::run()
 {
-    const int screenWidth = 3440;
-    const int screenHeight = 1760;
-
-    InitWindow(screenWidth, screenHeight, "Sorting Visualizer");
+    // Start in a resizable window so the layout can adapt to different display
+    // sizes. Borderless/fullscreen presentation can be enabled later without
+    // changing the layout helpers.
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    InitWindow(1280, 720, "Sorting Visualizer");
+    SetWindowMinSize(800, 450);
 
     SetTargetFPS(60);
 

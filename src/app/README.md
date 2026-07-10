@@ -91,9 +91,9 @@ large item counts from consuming too much work in one rendered frame.
 
 Watch these areas as the app grows:
 
-- App drawing is split into small helpers now, but the positions are still
-  hard-coded. A custom UI pass should introduce clearer layout helpers before
-  adding many more text rows or mouse controls.
+- App drawing now has explicit panel rectangles and most text placement is
+  relative to those rectangles. Future buttons, sliders, and selectors should
+  reuse the same app actions rather than duplicating state changes.
 - The app action helpers are private to `App.cpp` for now. If custom UI grows
   enough that these helpers need their own tests or files, extract them as one
   cohesive app-control concept rather than many tiny modules.

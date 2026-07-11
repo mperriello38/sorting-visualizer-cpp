@@ -57,14 +57,13 @@ The project currently has:
 - a realtime app path that generates input, runs the selected algorithm, loads the trace into `AnimationPlayer`, and renders playback
 - keyboard controls for play/pause, reset, one-event forward/backward stepping while paused, playback speed, draft item-count edits, draft algorithm selection, draft value-spec selection, draft initial-order selection, and explicit apply/regenerate
 - a draft-vs-loaded settings model so changing item count does not invalidate the active sort trace
-- private app actions separated from keyboard polling so future buttons and sliders can reuse the same state changes
+- a pure C++ `VisualizerSession` that owns settings transitions and playback policy independently of raylib
 - a per-frame event cap so high item counts and fast playback stay responsive
 
-The next major design risk is app growth. `App.cpp` is currently useful as a
-vertical slice, but it now owns window setup, draft settings, loaded settings,
-keyboard input, playback policy, status text, and module wiring. Helper
-functions keep the main loop readable. The next cleanup should keep app actions,
-layout, and playback policy explicit before custom buttons and sliders are added.
+The app boundary is now split deliberately: `App.cpp` owns raylib input,
+layout, and drawing, while `VisualizerSession` owns draft-vs-loaded settings,
+run regeneration, and playback state. The next major design pressure will come
+from custom buttons, sliders, and selectors rather than from the core layers.
 
 ## Source Layout
 
@@ -74,6 +73,8 @@ src/
   app/
     App.hpp
     App.cpp
+    VisualizerSession.hpp
+    VisualizerSession.cpp
     README.md
   domain/
     Algorithm.hpp
@@ -187,8 +188,8 @@ The current implementation is intentionally step-based:
 initial items + SortEvents -> AnimationPlayer -> SortState
 ```
 
-The app currently owns play/pause, speed, and frame-time policy by repeatedly
-calling this step-based core.
+The app-layer `VisualizerSession` owns play/pause, speed, and frame-time policy
+by repeatedly calling this step-based core.
 
 Backward stepping and future timeline controls should use
 `AnimationPlayer::seekToEventPosition`, not reverse-event logic in app code.
@@ -210,20 +211,24 @@ inside it.
 
 The composition root.
 
-`App` owns the main loop and wires together input generation, sorting, animation, and rendering. It should coordinate modules without absorbing their internal logic.
+`App` owns the main loop and raylib boundary. `VisualizerSession` coordinates
+input generation, sorting, and animation without depending on raylib.
 
-The current `App` also owns:
+`VisualizerSession` owns:
 
 - draft settings, edited by controls
 - loaded settings, used to generate the active trace
 - explicit apply/regenerate
 - playback timing and per-frame event limits
+
+`App.cpp` owns:
+
 - app-level status and controls text
 - keyboard mappings for algorithm, value-spec, and initial-order selection
+- screen layout and renderer calls
 
-This is acceptable while the UI is still keyboard-driven. If controls expand,
-settings editing, playback policy, or app-level drawing may deserve their own
-private helpers or app submodule.
+Future controls should issue `VisualizerSession` commands rather than learning
+how input generation, sorting, or animation replay work.
 
 ### `testing`
 
@@ -320,8 +325,8 @@ Before adding code to a file, ask:
 
 ## Roadmap
 
-1. Keep the app layer clean before building custom UI controls:
-   - keep keyboard and mouse input as thin translations into app actions
+1. Build custom UI controls against the `VisualizerSession` boundary:
+   - keep keyboard and mouse input as thin translations into session commands
    - keep app drawing grouped by purpose: controls, playback status, settings status, sort chart
    - avoid letting buttons or sliders call input generation, sorting, or animation replay directly
 2. Turn the proven keyboard actions into simple custom UI controls:

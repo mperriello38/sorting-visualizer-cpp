@@ -1,107 +1,108 @@
 # App Layer
 
-The app layer is the composition root for the visualizer.
+The app layer is the composition root and realtime control boundary for the
+visualizer. It is split into two cohesive modules:
 
-It owns the raylib window loop and wires together input generation, sorting,
-animation, and rendering. It should coordinate modules without moving their
-internal logic into the app.
+- `App` owns raylib window setup, input polling, layout, and app-level drawing.
+- `VisualizerSession` owns non-graphical application state and behavior.
 
-## Current Responsibilities
+The public entry point remains deliberately small:
 
-`App.cpp` currently owns:
-
-- window creation and shutdown
-- initial run settings
-- draft run settings edited by keyboard controls
-- loaded run settings used by the active animation trace
-- explicit apply/regenerate behavior
-- playback controls
-- per-frame playback work limits
-- app-level text for controls and status
-- keyboard mappings for item count, algorithm, value spec, initial order, and apply
-- calling `RaylibRenderer` to draw the current `SortState`
-
-This is acceptable while the interface is still keyboard-driven. The main loop
-should remain easy to scan:
-
-```text
-handle settings input
-handle playback input
-update playback
-draw app
+```cpp
+class App {
+public:
+    void run();
+};
 ```
 
-## Draft Settings And Loaded Settings
+## VisualizerSession
 
-The app intentionally separates:
+`VisualizerSession` is pure C++. It owns:
 
-- `draftSettings`: what the user is currently editing
-- `loadedSettings`: what generated the active animation trace
+- draft settings currently being edited
+- loaded settings that produced the active trace
+- applying draft settings and regenerating a run
+- the `AnimationPlayer` for the active trace
+- play, pause, reset, step, and seek commands
+- playback speed, elapsed event time, and the per-frame event cap
+- item-count bounds and current few-unique defaults shared with controls
 
-Changing item count, algorithm, value spec, or initial order edits
-`draftSettings` only. Pressing ENTER applies the draft, generates new input,
-runs the selected algorithm, and loads a new trace into the animation player.
+Its setters change draft settings without modifying the loaded trace. Calling
+`applyDraftSettings()` is the explicit transition that generates input, runs the
+selected algorithm, loads the new trace, pauses playback, and clears old timing.
 
-This prevents a dangerous hidden rule where item count changes could invalidate
-the old event stream in the middle of playback.
+Dirty state is derived from:
 
-`App.cpp` now separates app actions from keyboard polling. App actions describe
-user intent and mutate app state:
+```text
+draftSettings != loadedSettings
+```
 
-- set or nudge the draft item count
-- choose draft algorithm, value spec, or initial order
-- apply draft settings
-- toggle playback
-- reset playback
-- step forward while paused
-- step backward while paused
-- set or change playback speed
+It is not stored as a separate Boolean, so it cannot become stale.
 
-Keyboard helpers should stay thin: they check raylib key state and call these
-actions. Future buttons and sliders should call the same actions instead of
-duplicating state changes.
+`VisualizerSession::update(frameTime)` receives elapsed time as ordinary data.
+It does not call raylib, which keeps playback policy deterministic and testable.
 
-Current keyboard settings are:
+## App.cpp
+
+`App.cpp` owns:
+
+- window creation and shutdown
+- keyboard and future mouse polling
+- translating input into `VisualizerSession` commands
+- keyboard-specific increments and default choices
+- screen and panel layout
+- title, controls, playback status, and settings-status drawing
+- passing `VisualizerSession::currentSortState()` to `RaylibRenderer`
+
+The main loop should remain easy to scan:
+
+```text
+poll settings input
+poll playback input
+update the session with frame time
+draw the app
+```
+
+Raylib input helpers should stay thin. Future buttons and sliders should call
+the same session commands used by keyboard input instead of generating data,
+running algorithms, or manipulating `AnimationPlayer` directly.
+
+## Keyboard Controls
 
 - `A` / `D`: decrease or increase draft item count
 - `1`, `2`, `3`: choose bubble, insertion, or selection sort
 - `4`, `5`, `6`: choose permutation, few-unique, or all-equal values
 - `7`, `8`, `9`, `0`: choose random, ascending, descending, or nearly ascending order
-- `ENTER`: apply the draft settings and regenerate the loaded run
+- `ENTER`: apply draft settings and regenerate the loaded run
+- `SPACE`: play or pause
+- `R`: reset playback
+- `UP` / `DOWN`: increase or decrease playback speed
 - `LEFT` / `RIGHT`: step backward or forward while paused
 
-## Playback Policy
+## Dependency Direction
 
-`AnimationPlayer` applies one event at a time. The app decides how often to call
-`stepForward()`.
+```text
+App.cpp -> VisualizerSession
+App.cpp -> RaylibRenderer
+App.cpp -> raylib
 
-The current app policy includes:
+VisualizerSession -> input
+VisualizerSession -> sorting
+VisualizerSession -> animation
+VisualizerSession -> domain
+```
 
-- `secondsPerEvent`
-- speed-up and slow-down key controls
-- `maxEventsPerFrame`
-- manual one-event stepping while paused
-- manual one-event backward stepping while paused
-- reset to the start of the currently loaded trace
-
-`maxEventsPerFrame` is a responsiveness cap. It prevents very fast playback and
-large item counts from consuming too much work in one rendered frame.
+`VisualizerSession` must not include raylib or rendering headers.
 
 ## Design Warnings
 
-Watch these areas as the app grows:
-
-- App drawing now has explicit panel rectangles and most text placement is
-  relative to those rectangles. Future buttons, sliders, and selectors should
-  reuse the same app actions rather than duplicating state changes.
-- The app action helpers are private to `App.cpp` for now. If custom UI grows
-  enough that these helpers need their own tests or files, extract them as one
-  cohesive app-control concept rather than many tiny modules.
-- `refreshSettingsDirty` currently relies on `SortRunSpec` value equality. If a
-  future editable setting is not part of `SortRunSpec`, dirty-state logic must
-  account for it explicitly.
-- Keyboard controls are useful for proving behavior, but custom UI controls
-  should request app actions rather than generating input or replaying events
-  themselves.
-- Live preview while dragging a future slider should be treated as a deliberate
-  policy. The safe default is still edit draft settings first, apply later.
+- Draft validation is not yet generalized. The current item-count compatibility
+  behavior preserves the keyboard UI's few-unique convention, but future range
+  and parameter controls will need one explicit validation policy.
+- Live preview while dragging a future item-count slider requires a deliberate
+  policy. Editing draft settings and applying on release is the safe default.
+- Keep layout and input translation in `App.cpp`; do not move pixel geometry or
+  key codes into `VisualizerSession`.
+- Do not split each control or state transition into its own shallow module.
+  Extract a UI-controls module only after buttons, sliders, and selectors reveal
+  a cohesive reusable abstraction.

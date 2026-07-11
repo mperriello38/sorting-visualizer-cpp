@@ -20,6 +20,7 @@ add_executable(sorting_visualizer
     src/main.cpp
 
     src/app/App.cpp
+    src/app/VisualizerSession.cpp
 
     src/input/InputGenerator.cpp
 
@@ -36,6 +37,8 @@ add_executable(sorting_visualizer
 add_executable(sorting_tests
     src/testing/TestMain.cpp
     src/testing/SortTests.cpp
+
+    src/app/VisualizerSession.cpp
 
     src/input/InputGenerator.cpp
 

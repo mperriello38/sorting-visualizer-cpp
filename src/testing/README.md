@@ -192,12 +192,9 @@ and app code from needing algorithm-specific assumptions.
 The next required tests should be added alongside the next production boundary.
 For the current raylib renderer, that may only mean very small tests or no tests
 at first, because direct drawing is better verified visually in the early stage.
-Keep visual polish and frame timing out of the test layer until app playback
-logic is extracted into pure C++ helpers that can be tested without raylib.
-
-The current app playback helpers poll raylib keys and frame time directly, so
-they are not good unit-test targets yet. If playback policy is later extracted
-into a pure C++ helper, useful tests would include:
+Keep visual polish out of the test layer. App playback policy now lives in the
+pure C++ `VisualizerSession`, so it can be tested without opening a raylib
+window. The next useful tests include:
 
 - pause means elapsed time does not advance events
 - play advances by the expected number of events for a given elapsed time

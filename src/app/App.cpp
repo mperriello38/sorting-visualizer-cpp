@@ -5,48 +5,18 @@
 #include <variant>
 
 #include <raylib.h>
-#include <vector>
 
-#include "animation/AnimationPlayer.hpp"
+#include "VisualizerSession.hpp"
 #include "domain/Algorithm.hpp"
 #include "domain/SortSpec.hpp"
-#include "input/InputGenerator.hpp"
 #include "rendering/RaylibRenderer.hpp"
-#include "sorting/SortRunner.hpp"
 
 namespace {
 
-    struct PlaybackState {
-        bool playing = true;
-        float eventTimer = 0.0f;
-        float secondsPerEvent = 0.05f;
-    };
-
-    // Private app state for the current keyboard-driven UI.
-    //
-    // Design note: this is still small enough to keep in App.cpp. If settings,
-    // playback, and drawing each grow their own rules, split those concepts
-    // deliberately instead of letting AppState become a grab bag.
-    struct AppState {
-        SortRunSpec draftSettings;
-        SortRunSpec loadedSettings;
-        bool settingsDirty = false;
-
-        PlaybackState playback;
-        AnimationPlayer player;
-    };
-
     // App-level policy constants. Keeping these named makes it clearer which
-    // numbers are UI/playback choices rather than domain rules.
-    constexpr unsigned int minimumItemCount = 1;
-    constexpr unsigned int maximumItemCount = 1000;
-    constexpr unsigned int maximumFewUniqueDefaultCount = 5;
-
-    constexpr float maximumSecondsPerEvent = 1.0f;
-    constexpr float minimumSecondsPerEvent = 0.0005f;
+    // numbers are keyboard/UI choices rather than domain rules.
     constexpr float secondsPerEventStep = 0.005f;
 
-    constexpr unsigned int maximumEventsPerFrame = 50;
     constexpr bool showLayoutDebug = false;
 
 // =================================================================================
@@ -127,121 +97,11 @@ namespace {
     }
 
 // =================================================================================
-// App actions
+// Keyboard-specific settings policy
 //
-// These helpers describe user intent without mentioning keyboard keys or mouse
-// buttons. Keyboard handling and future custom UI controls should call these
-// actions instead of duplicating state mutation.
+// VisualizerSession owns settings validity and state transitions. These helpers
+// only translate keyboard-friendly changes into exact session commands.
 // =================================================================================
-
-    // Build one complete run from the current app settings and load it into the
-    // animation player.
-    //
-    // This is the path a future item-count slider should use after it changes
-    // SortInputSpec: generate new input, rerun the algorithm, then replace the
-    // player's loaded trace. Keeping that sequence here prevents UI code from
-    // learning the details of input generation and sorting.
-    void loadRun(
-        AnimationPlayer& player,
-        const SortRunSpec& runSettings)
-    {
-        std::vector<SortItem> items = generateInput(runSettings.inputSpec);
-        SortTrace trace = runSort(runSettings.algorithm, items);
-
-        player.load(items, trace.events);
-    }
-
-    // Replace the active loaded run with the currently edited draft settings.
-    //
-    // This is the explicit boundary between "the user changed a setting" and
-    // "the visualizer is now playing a new event trace." Keeping this transition
-    // explicit prevents item-count edits from invalidating a sort mid-playback.
-    void applyDraftSettings(AppState& state)
-    {
-        state.loadedSettings = state.draftSettings;
-        loadRun(state.player, state.loadedSettings);
-
-        state.settingsDirty = false;
-        state.playback.playing = false;
-        state.playback.eventTimer = 0.0f;
-    }
-
-    // Keep settingsDirty tied to the visible draft-vs-loaded model.
-    //
-    // Every editable setting lives inside SortRunSpec, and SortRunSpec has
-    // defaulted value equality in the domain layer. If the user changes a draft
-    // setting back to the loaded value, this returns settingsDirty to false.
-    void refreshSettingsDirty(AppState& state)
-    {
-        state.settingsDirty = !(state.draftSettings == state.loadedSettings);
-    }
-
-    // Change only the draft algorithm. The active loaded run is not regenerated
-    // here; ENTER applies the draft later through applyDraftSettings().
-    void setDraftAlgorithm(AppState& state, Algorithm algorithm)
-    {
-        if (state.draftSettings.algorithm != algorithm) {
-            state.draftSettings.algorithm = algorithm;
-            refreshSettingsDirty(state);
-        }
-    }
-
-    void setDraftValueSpec(AppState& state, ValueSpec valueSpec)
-    {
-        // Like algorithm, order, and item-count edits, this only changes the
-        // draft run. ENTER is still responsible for applying the draft and
-        // rebuilding the loaded trace.
-        state.draftSettings.inputSpec.valueSpec = valueSpec;
-        refreshSettingsDirty(state);
-    }
-
-    void setDraftOrderSpec(AppState& state, InitialOrderSpec orderSpec)
-    {
-        // Order selection changes how the next generated input is arranged.
-        // It cannot be applied to the active trace without regenerating the run.
-        state.draftSettings.inputSpec.initialOrderSpec = orderSpec;
-        refreshSettingsDirty(state);
-    }
-
-    void keepDraftValueSpecCompatibleWithItemCount(AppState& state)
-    {
-        // FewUniqueValueSpec is currently the only value spec whose validity
-        // depends on itemCount. In the keyboard-driven UI, "Few Unique" means
-        // values come from 1..itemCount with at most five unique values.
-        // Keep those derived fields synchronized when itemCount changes so the
-        // draft spec cannot quietly preserve an old range.
-        if (FewUniqueValueSpec* valueSpec =
-                std::get_if<FewUniqueValueSpec>(&state.draftSettings.inputSpec.valueSpec)) {
-            const int itemCount = static_cast<int>(state.draftSettings.inputSpec.itemCount);
-            const int uniqueValueCount =
-                itemCount < static_cast<int>(maximumFewUniqueDefaultCount)
-                    ? itemCount
-                    : static_cast<int>(maximumFewUniqueDefaultCount);
-
-            valueSpec->minValue = 1;
-            valueSpec->maxValue = itemCount;
-            valueSpec->uniqueValueCount = uniqueValueCount;
-        }
-    }
-
-    // Set the draft item count to an exact value. The active loaded run is not
-    // regenerated here; ENTER applies the draft later through applyDraftSettings().
-    //
-    // A future slider should call this action directly. The keyboard nudge
-    // helper below exists only to choose convenient step sizes for keys.
-    void setDraftItemCount(AppState& state, unsigned int itemCount)
-    {
-        const unsigned int clampedItemCount = std::clamp(
-            itemCount,
-            minimumItemCount,
-            maximumItemCount);
-
-        if (state.draftSettings.inputSpec.itemCount != clampedItemCount) {
-            state.draftSettings.inputSpec.itemCount = clampedItemCount;
-            keepDraftValueSpecCompatibleWithItemCount(state);
-            refreshSettingsDirty(state);
-        }
-    }
 
     unsigned int keyboardItemCountStride(unsigned int itemCount)
     {
@@ -260,77 +120,33 @@ namespace {
     //
     // direction should be -1 to decrease or +1 to increase. Keeping direction as
     // an int is useful because unsigned item counts cannot represent "negative."
-    void nudgeDraftItemCount(AppState& state, int direction)
+    void nudgeDraftItemCount(VisualizerSession& session, int direction)
     {
-        const unsigned int currentItemCount = state.draftSettings.inputSpec.itemCount;
+        const unsigned int currentItemCount =
+            session.draftSettings().inputSpec.itemCount;
         const unsigned int itemStride = keyboardItemCountStride(currentItemCount);
         unsigned int nextItemCount = currentItemCount;
 
         if (direction < 0) {
             // itemCount is unsigned, so subtracting past zero would wrap to a
             // very large number. Clamp before subtracting to avoid underflow.
-            if (currentItemCount <= minimumItemCount + itemStride) {
-                nextItemCount = minimumItemCount;
+            if (currentItemCount <= VisualizerSession::minimumItemCount + itemStride) {
+                nextItemCount = VisualizerSession::minimumItemCount;
             }
             else {
                 nextItemCount = currentItemCount - itemStride;
             }
         }
         else if (direction > 0) {
-            if (currentItemCount + itemStride >= maximumItemCount) {
-                nextItemCount = maximumItemCount;
+            if (currentItemCount + itemStride >= VisualizerSession::maximumItemCount) {
+                nextItemCount = VisualizerSession::maximumItemCount;
             }
             else {
                 nextItemCount = currentItemCount + itemStride;
             }
         }
 
-        setDraftItemCount(state, nextItemCount);
-    }
-
-    void togglePlayback(AppState& state)
-    {
-        state.playback.playing = !state.playback.playing;
-        state.playback.eventTimer = 0.0f;
-    }
-
-    void resetPlayback(AppState& state)
-    {
-        state.player.reset();
-        state.playback.eventTimer = 0.0f;
-        state.playback.playing = false;
-    }
-
-    void stepPlaybackForwardWhilePaused(AppState& state)
-    {
-        if (!state.playback.playing) {
-            state.player.stepForward();
-        }
-    }
-
-    void stepPlaybackBackwardWhilePaused(AppState& state)
-    {
-        if (!state.playback.playing) {
-            state.player.stepBackward();
-        }
-    }
-
-    // Set the exact playback speed field. Smaller seconds-per-event means
-    // faster playback. The clamp keeps UI controls from creating unusable speed
-    // values.
-    void setPlaybackSecondsPerEvent(AppState& state, float secondsPerEvent)
-    {
-        state.playback.secondsPerEvent = std::clamp(
-            secondsPerEvent,
-            minimumSecondsPerEvent,
-            maximumSecondsPerEvent);
-    }
-
-    void changePlaybackSpeed(AppState& state, float secondsPerEventDelta)
-    {
-        setPlaybackSecondsPerEvent(
-            state,
-            state.playback.secondsPerEvent + secondsPerEventDelta);
+        session.setDraftItemCount(nextItemCount);
     }
 
 // =================================================================================
@@ -340,37 +156,37 @@ namespace {
 // thin so future mouse/UI controls can reuse the same actions above.
 // =================================================================================
 
-    void handleItemCountInput(AppState& state)
+    void handleItemCountInput(VisualizerSession& session)
     {
         if (IsKeyPressed(KEY_A)) {
-            nudgeDraftItemCount(state, -1);
+            nudgeDraftItemCount(session, -1);
         }
         
         if (IsKeyPressed(KEY_D)) {
-            nudgeDraftItemCount(state, 1);
+            nudgeDraftItemCount(session, 1);
         }
     }
 
-    void handleAlgorithmInput(AppState& state)
+    void handleAlgorithmInput(VisualizerSession& session)
     {
         if (IsKeyPressed(KEY_ONE)) {
-            setDraftAlgorithm(state, Algorithm::Bubble);
+            session.setDraftAlgorithm(Algorithm::Bubble);
         }
 
         if (IsKeyPressed(KEY_TWO)) {
-            setDraftAlgorithm(state, Algorithm::Insertion);
+            session.setDraftAlgorithm(Algorithm::Insertion);
         }
 
         if (IsKeyPressed(KEY_THREE)) {
-            setDraftAlgorithm(state, Algorithm::Selection);
+            session.setDraftAlgorithm(Algorithm::Selection);
         }
     }
 
-    void handleValueSpecInput(AppState& state)
+    void handleValueSpecInput(VisualizerSession& session)
     {
         if (IsKeyPressed(KEY_FOUR)) {
             // Permutation has no fields: itemCount alone defines 1..itemCount.
-            setDraftValueSpec(state, PermutationValueSpec{});
+            session.setDraftValueSpec(PermutationValueSpec{});
         }
 
         if (IsKeyPressed(KEY_FIVE)) {
@@ -378,14 +194,14 @@ namespace {
             // These are app-level defaults for the keyboard UI, not input-layer
             // rules. uniqueValueCount is clamped to itemCount so small inputs
             // still produce a valid spec.
-            const unsigned int itemCount = state.draftSettings.inputSpec.itemCount;
+            const unsigned int itemCount =
+                session.draftSettings().inputSpec.itemCount;
             const unsigned int uniqueValueCount =
-                itemCount < maximumFewUniqueDefaultCount
+                itemCount < VisualizerSession::defaultFewUniqueValueCount
                     ? itemCount
-                    : maximumFewUniqueDefaultCount;
+                    : VisualizerSession::defaultFewUniqueValueCount;
 
-            setDraftValueSpec(
-                state,
+            session.setDraftValueSpec(
                 FewUniqueValueSpec{
                     1,
                     static_cast<int>(itemCount),
@@ -395,35 +211,35 @@ namespace {
 
         if (IsKeyPressed(KEY_SIX)) {
             // AllEqualValueSpec needs the value that every item should receive.
-            setDraftValueSpec(state, AllEqualValueSpec{1});
+            session.setDraftValueSpec(AllEqualValueSpec{1});
         }
     }
 
-    void handleOrderSpecInput(AppState& state)
+    void handleOrderSpecInput(VisualizerSession& session)
     {
         if (IsKeyPressed(KEY_SEVEN)) {
-            setDraftOrderSpec(state, RandomOrderSpec{});
+            session.setDraftOrderSpec(RandomOrderSpec{});
         }
 
         if (IsKeyPressed(KEY_EIGHT)) {
-            setDraftOrderSpec(state, AscendingOrderSpec{});
+            session.setDraftOrderSpec(AscendingOrderSpec{});
         }
 
         if (IsKeyPressed(KEY_NINE)) {
-            setDraftOrderSpec(state, DescendingOrderSpec{});
+            session.setDraftOrderSpec(DescendingOrderSpec{});
         }
 
         if (IsKeyPressed(KEY_ZERO)) {
             // Temporary app default: "near" means 10% swap pressure after
             // ascending order. A future slider could edit this field directly.
-            setDraftOrderSpec(state, NearlyAscendingOrderSpec{0.10});
+            session.setDraftOrderSpec(NearlyAscendingOrderSpec{0.10});
         }
     }
 
-    void handleApplyInput(AppState& state)
+    void handleApplyInput(VisualizerSession& session)
     {
-        if (IsKeyPressed(KEY_ENTER) && state.settingsDirty) {
-            applyDraftSettings(state);
+        if (IsKeyPressed(KEY_ENTER) && session.settingsDirty()) {
+            session.applyDraftSettings();
         }
     }
 
@@ -431,13 +247,13 @@ namespace {
     //
     // These controls do not touch the active animation trace directly. They only
     // edit draft settings; ENTER is the explicit apply/regenerate action.
-    void handleSettingsInput(AppState& state)
+    void handleSettingsInput(VisualizerSession& session)
     {
-        handleItemCountInput(state);
-        handleAlgorithmInput(state);
-        handleValueSpecInput(state);
-        handleOrderSpecInput(state);
-        handleApplyInput(state);
+        handleItemCountInput(session);
+        handleAlgorithmInput(session);
+        handleValueSpecInput(session);
+        handleOrderSpecInput(session);
+        handleApplyInput(session);
     }
 
     // Keyboard controls for playback of the currently loaded run.
@@ -445,57 +261,30 @@ namespace {
     // IsKeyPressed is true only on the frame the key changes from up to down.
     // That keeps SPACE and RIGHT from toggling/stepping many times from one held
     // key press.
-    void handlePlaybackInput(AppState& state)
+    void handlePlaybackInput(VisualizerSession& session)
     {
         if (IsKeyPressed(KEY_SPACE)) {
-            togglePlayback(state);
+            session.togglePlayback();
         }
 
         if (IsKeyPressed(KEY_R)) {
-            resetPlayback(state);
+            session.resetPlayback();
         }
 
         if (IsKeyPressed(KEY_UP)) {
-            changePlaybackSpeed(state, -secondsPerEventStep);
+            session.changePlaybackSpeed(-secondsPerEventStep);
         }
 
         if (IsKeyPressed(KEY_DOWN)) {
-            changePlaybackSpeed(state, secondsPerEventStep);
+            session.changePlaybackSpeed(secondsPerEventStep);
         }
 
         if (IsKeyPressed(KEY_RIGHT)) {
-            stepPlaybackForwardWhilePaused(state);
+            session.stepForward();
         }
 
         if (IsKeyPressed(KEY_LEFT)) {
-            stepPlaybackBackwardWhilePaused(state);
-        }
-    }
-
-    void updatePlayback(AppState& state)
-    {
-        // Cap replay work per rendered frame so high item counts and very fast
-        // playback do not make the app feel frozen. This is a responsiveness
-        // policy, not a sorting rule; lowering it makes max speed smoother but
-        // slower, raising it finishes traces faster but risks frame drops.
-        unsigned int eventsAppliedThisFrame = 0;
-
-        // Realtime playback is just repeated calls to stepForward() controlled
-        // by elapsed frame time. While paused, time does not accumulate.
-        if (state.playback.playing && !state.player.isComplete()) {
-            state.playback.eventTimer += GetFrameTime();
-
-            // Use a loop so very small secondsPerEvent values can advance more
-            // than one event per rendered frame. Subtracting preserves leftover
-            // fractional time instead of throwing it away each step.
-            while (
-                state.playback.eventTimer >= state.playback.secondsPerEvent &&
-                !state.player.isComplete() &&
-                eventsAppliedThisFrame < maximumEventsPerFrame) {
-                state.player.stepForward();
-                state.playback.eventTimer -= state.playback.secondsPerEvent;
-                eventsAppliedThisFrame += 1;
-            }
+            session.stepBackward();
         }
     }
 
@@ -711,7 +500,9 @@ namespace {
         currentX = drawKeyHint("Near:", "0", currentX, row3TextY, fontSize, smallSpacing, largeSpacing);
     }
 
-    void drawPlaybackStatus(const AppState& state, Rectangle playbackStatusBounds)
+    void drawPlaybackStatus(
+        const VisualizerSession& session,
+        Rectangle playbackStatusBounds)
     {
         const float padding = playbackStatusBounds.height * 0.12f;
         const Rectangle innerBounds = insetRectangle(playbackStatusBounds, padding);
@@ -728,11 +519,11 @@ namespace {
         const char* playbackText = "Paused";
         Color playbackColor = RED;
 
-        if (state.player.isComplete()) {
+        if (session.isComplete()) {
             playbackText = "Complete";
             playbackColor = BLUE;
         }
-        else if (state.playback.playing) {
+        else if (session.isPlaying()) {
             playbackText = "Playing";
             playbackColor = GREEN;
         }
@@ -742,11 +533,17 @@ namespace {
         currentX = drawTextAndAdvance("Playback:", currentX, textY, fontSize, MAROON, largeSpacing);
         currentX = drawTextAndAdvance(playbackText, currentX, textY, fontSize, playbackColor, largeSpacing);
         currentX = drawTextAndAdvance("Seconds/Event:", currentX, textY, fontSize, DARKGRAY, smallSpacing);
-        currentX = drawTextAndAdvance(TextFormat("%.4f", state.playback.secondsPerEvent), currentX, textY, fontSize, GREEN, largeSpacing);
+        currentX = drawTextAndAdvance(TextFormat("%.4f", session.secondsPerEvent()), currentX, textY, fontSize, GREEN, largeSpacing);
     }
 
-    void drawSettingsStatus(const AppState& state, Rectangle footerBounds)
+    void drawSettingsStatus(
+        const VisualizerSession& session,
+        Rectangle footerBounds)
     {
+        const SortRunSpec& loadedSettings = session.loadedSettings();
+        const SortRunSpec& draftSettings = session.draftSettings();
+        const bool settingsDirty = session.settingsDirty();
+
         const float padding = footerBounds.height * 0.12f;
         const Rectangle innerBounds = insetRectangle(footerBounds, padding);
 
@@ -785,7 +582,7 @@ namespace {
             10,
             28);
 
-        const Color draftColor = state.settingsDirty ? RED : GREEN;
+        const Color draftColor = settingsDirty ? RED : GREEN;
 
         for (int rowIndex = 0; rowIndex < 4; ++rowIndex) {
             const Rectangle row = {
@@ -800,7 +597,7 @@ namespace {
             if (rowIndex == 0) {
                 drawLabelValue(
                     "Loaded algorithm:",
-                    algorithmName(state.loadedSettings.algorithm),
+                    algorithmName(loadedSettings.algorithm),
                     loadedColumn.x,
                     rowTextY,
                     fontSize,
@@ -808,7 +605,7 @@ namespace {
 
                 drawLabelValue(
                     "Draft algorithm:",
-                    algorithmName(state.draftSettings.algorithm),
+                    algorithmName(draftSettings.algorithm),
                     draftColumn.x,
                     rowTextY,
                     fontSize,
@@ -817,7 +614,7 @@ namespace {
             else if (rowIndex == 1) {
                 drawLabelValue(
                     "Loaded values:",
-                    valueSpecName(state.loadedSettings.inputSpec.valueSpec),
+                    valueSpecName(loadedSettings.inputSpec.valueSpec),
                     loadedColumn.x,
                     rowTextY,
                     fontSize,
@@ -825,7 +622,7 @@ namespace {
 
                 drawLabelValue(
                     "Draft values:",
-                    valueSpecName(state.draftSettings.inputSpec.valueSpec),
+                    valueSpecName(draftSettings.inputSpec.valueSpec),
                     draftColumn.x,
                     rowTextY,
                     fontSize,
@@ -834,7 +631,7 @@ namespace {
             else if (rowIndex == 2) {
                 drawLabelValue(
                     "Loaded order:",
-                    orderSpecName(state.loadedSettings.inputSpec.initialOrderSpec),
+                    orderSpecName(loadedSettings.inputSpec.initialOrderSpec),
                     loadedColumn.x,
                     rowTextY,
                     fontSize,
@@ -842,7 +639,7 @@ namespace {
 
                 drawLabelValue(
                     "Draft order:",
-                    orderSpecName(state.draftSettings.inputSpec.initialOrderSpec),
+                    orderSpecName(draftSettings.inputSpec.initialOrderSpec),
                     draftColumn.x,
                     rowTextY,
                     fontSize,
@@ -851,7 +648,7 @@ namespace {
             else {
                 drawLabelValue(
                     "Loaded item count:",
-                    TextFormat("%u", state.loadedSettings.inputSpec.itemCount),
+                    TextFormat("%u", loadedSettings.inputSpec.itemCount),
                     loadedColumn.x,
                     rowTextY,
                     fontSize,
@@ -859,7 +656,7 @@ namespace {
 
                 drawLabelValue(
                     "Draft item count:",
-                    TextFormat("%u", state.draftSettings.inputSpec.itemCount),
+                    TextFormat("%u", draftSettings.inputSpec.itemCount),
                     draftColumn.x,
                     rowTextY,
                     fontSize,
@@ -873,7 +670,7 @@ namespace {
             28);
         const float messageY = textYForRow(messageColumn, messageFontSize);
 
-        if (state.settingsDirty) {
+        if (settingsDirty) {
             drawTextAndAdvance(
                 "Settings changed: press ENTER to apply",
                 messageColumn.x,
@@ -902,7 +699,9 @@ namespace {
     // should not grow into custom UI widgets. If the controls become interactive
     // mouse elements, move that behavior behind smaller helpers instead of adding
     // more logic here.
-    void drawApp(const AppState& state, const RaylibRenderer& renderer)
+    void drawApp(
+        const VisualizerSession& session,
+        const RaylibRenderer& renderer)
     {
         BeginDrawing();
 
@@ -929,10 +728,10 @@ namespace {
         drawTitle(layout.titleBounds);
 
         drawControls(layout.controlsBounds);
-        drawPlaybackStatus(state, layout.playbackStatusBounds);
-        drawSettingsStatus(state, layout.footerBounds);
+        drawPlaybackStatus(session, layout.playbackStatusBounds);
+        drawSettingsStatus(session, layout.footerBounds);
 
-        renderer.drawSortState(state.player.currentState(), layout.chartBounds);
+        renderer.drawSortState(session.currentSortState(), layout.chartBounds);
 
         EndDrawing();
     }
@@ -959,22 +758,14 @@ void App::run()
         }
     };
 
-    AppState state{
-        initialSettings,
-        initialSettings,
-        false,
-        PlaybackState{},
-        AnimationPlayer{}
-    };
-
-    loadRun(state.player, state.loadedSettings);
+    VisualizerSession session(initialSettings);
     RaylibRenderer renderer;
 
     while (!WindowShouldClose()) {
-        handleSettingsInput(state);
-        handlePlaybackInput(state);
-        updatePlayback(state);
-        drawApp(state, renderer);
+        handleSettingsInput(session);
+        handlePlaybackInput(session);
+        session.update(GetFrameTime());
+        drawApp(session, renderer);
     }
 
     CloseWindow();

@@ -11,6 +11,7 @@
 #include "domain/SortSpec.hpp"
 #include "input/InputGenerator.hpp"
 #include "sorting/SortRunner.hpp"
+#include "app/VisualizerSession.hpp"
 
 namespace {
 
@@ -1553,6 +1554,196 @@ namespace {
             "checkComplete",
             checkComplete(finalState, true)
         );
+    }
+
+    // =================================================================================
+    // App layer (VisualizationSession) Tests
+    // =================================================================================
+
+    SortRunSpec createInitialRunSpec()
+    {
+        const SortRunSpec initialSettings{
+            Algorithm::Selection,
+            SortInputSpec{
+                10,
+                PermutationValueSpec{},
+                RandomOrderSpec{},
+                12345
+            }
+        };
+
+        return initialSettings;
+    }
+
+    // Construction Test. Draft settings = loaded settings.
+    // settingsDirty() false
+    // Current state contains the requested item count
+    // Event position starts at 0
+
+    void runVisualizerSessionConstructionTest(TestReport& report)
+    {
+        // Use a complete, deterministic run specification so every constructor
+        // postcondition can be checked against one known input.
+        SortRunSpec initialSettings = createInitialRunSpec();
+
+        VisualizerSession session(initialSettings);
+
+        recordRequired(
+            report,
+            "app/session",
+            "construction",
+            "checkDraftSettings",
+            {
+                session.draftSettings() == initialSettings,
+                "Draft settings differ from the constructor settings."
+            }
+        );
+
+        recordRequired(
+            report,
+            "app/session",
+            "construction",
+            "checkLoadedSettings",
+            {
+                session.loadedSettings() == initialSettings,
+                "Loaded settings differ from the constructor settings."
+            }
+        );
+
+        recordRequired(
+            report,
+            "app/session",
+            "construction",
+            "checkSettingsClean",
+            {
+                !session.settingsDirty(),
+                "A newly constructed session reports dirty settings."
+            }
+        );
+
+        recordRequired(
+            report,
+            "app/session",
+            "construction",
+            "checkItemCount",
+            {
+                session.currentSortState().items.size() ==
+                    static_cast<std::size_t>(initialSettings.inputSpec.itemCount),
+                "The initial SortState has an unexpected item count."
+            }
+        );
+
+        recordRequired(
+            report,
+            "app/session",
+            "construction",
+            "checkEventPosition",
+            {
+                session.currentEventPosition() == 0,
+                "A newly constructed session does not start at event position zero."
+            }
+        );
+    }
+
+    // Verify changing draft settings changes draftSettings()
+    // leaves loadedSettings() unchanged
+    // makes settingsDirty() true
+    // does not change the current event position
+    // does not replace or advance the active animation
+    void runVisualizerSessionDraftIsolationTest(TestReport& report)
+    {
+        // Initialize the visualizer session
+        const SortRunSpec initialSettings = createInitialRunSpec();
+
+        VisualizerSession session(initialSettings);
+
+        const std::size_t initialEventPosition = session.currentEventPosition();
+
+        const std::size_t initialEventCount = session.eventCount();
+
+        const std::vector<SortItem> initialItems = generateInput(initialSettings.inputSpec);
+
+        // Now that the visualizer session is initialized, update the draftSettings
+        const SortRunSpec newSettings{
+            Algorithm::Bubble,
+            SortInputSpec{
+                12,
+                AllEqualValueSpec{7},
+                DescendingOrderSpec{},
+                12345
+            }
+        };
+        session.setDraftAlgorithm(newSettings.algorithm);
+        session.setDraftValueSpec(newSettings.inputSpec.valueSpec);
+        session.setDraftOrderSpec(newSettings.inputSpec.initialOrderSpec);
+        session.setDraftItemCount(newSettings.inputSpec.itemCount);
+
+        recordRequired(
+            report,
+            "app/session",
+            "draft isolation",
+            "checkStateItemsUnchanged",
+            checkStateItems(session.currentSortState(), initialItems)
+        );
+        recordRequired(
+            report,
+            "app/session",
+            "draft isolation",
+            "checkDraftSettings",
+            {
+                session.draftSettings() == newSettings,
+                "newSettings did not update the draftSettings properly."
+            }
+        );
+
+        recordRequired(
+            report,
+            "app/session",
+            "draft isolation",
+            "checkLoadedSettingsUnchanged",
+            {
+                session.loadedSettings() == initialSettings,
+                "loadedSettings is not equal to initialSettings."
+            }
+        );
+
+        recordRequired(
+            report,
+            "app/session",
+            "draft isolation",
+            "checkSettingsMarkedDirty",
+            {
+                session.settingsDirty(),
+                "Settings were updated, but not marked as dirty."
+            }
+        );
+
+        recordRequired(
+            report,
+            "app/session",
+            "draft isolation",
+            "checkCurrentEventPositionUnchanged",
+            {
+                session.currentEventPosition() == initialEventPosition,
+                "The current event position changed while editing draft settings."
+            }
+        );
+
+        recordRequired(
+            report,
+            "app/session",
+            "draft isolation",
+            "checkEventCountUnchanged",
+            {
+                session.eventCount() == initialEventCount,
+                "The event count changed while editing draft settings."
+            }
+        );
+    }
+
+    void runVisualizerSessionDirtyStateReversibilityTest(TestReport& report)
+    {
+        
     }
 
     // =================================================================================

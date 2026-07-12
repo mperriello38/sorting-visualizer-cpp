@@ -1,9 +1,9 @@
 # Sorting Visualizer
 
-A realtime sorting algorithm visualizer written in C++ with raylib.
+A real-time sorting algorithm visualizer written in C++20 with raylib.
 
+The application separates input generation, sorting, event replay, animation, and rendering so that sorting behavior can be tested independently of the graphical interface. Each algorithm produces a replayable event trace that drives the visualization and supports automated correctness checks. The current version includes bubble sort, insertion sort, selection sort, configurable input generation, playback controls, and a keyboard-driven interface.
 
-The project is built around the design ideas from *A Philosophy of Software Design*: explicit module boundaries, narrow public interfaces, and clear ownership of domain, input generation, sorting, animation, rendering, and app responsibilities. The current implementation focuses on the core architecture and a keyboard-driven UI, with custom controls and more algorithms planned.
 
 ## Demo
 

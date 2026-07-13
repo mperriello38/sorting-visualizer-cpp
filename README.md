@@ -64,16 +64,20 @@ The project currently has:
 - a pure C++ `VisualizerSession` that owns settings transitions and playback policy independently of raylib
 - a per-frame event cap so high item counts and fast playback stay responsive
 
-The app boundary is now split deliberately: `App.cpp` owns raylib input,
-layout, and drawing, while `VisualizerSession` owns draft-vs-loaded settings,
-run regeneration, and playback state. The next major design pressure will come
-from custom buttons, sliders, and selectors rather than from the core layers.
+The app boundary is split deliberately: `App.cpp` owns window and frame
+lifetime, `AppUi.cpp` owns raylib input, layout, and app-level drawing, and
+`VisualizerSession` owns draft-vs-loaded settings, run regeneration, and
+playback state. The next major design pressure will come from custom buttons,
+sliders, and selectors rather than from the core layers.
 
 ## Module Dependencies
 
 ![Flow Chart of Dependencies](docs/media/Dependencies-Flow-Chart.png)
 
 An arrow from A to B means that A depends on B. Dashed arrows represent test-only dependencies.
+
+The diagram's `App / UI loop` box groups the small `App` composition root and
+the raylib-facing `AppUi` implementation.
 
 `build/` is generated output and should not be treated as source architecture.
 
@@ -82,12 +86,18 @@ An arrow from A to B means that A depends on B. Dashed arrows represent test-onl
 The intended dependency direction is:
 
 ```text
-main -> App / UI loop
+main -> App
 
-App / UI loop -> Rendering
-App / UI loop -> VisualizerSession
-App / UI loop -> Raylib
-App / UI loop -> Domain
+App -> AppUi
+App -> Rendering
+App -> VisualizerSession
+App -> Raylib
+App -> Domain
+
+AppUi -> Rendering
+AppUi -> VisualizerSession
+AppUi -> Raylib
+AppUi -> Domain
 
 Rendering -> Raylib
 Rendering -> Domain
@@ -112,7 +122,10 @@ Testing -> Domain
 Domain -> nothing project-specific
 ```
 
-raylib should stay at the edge of the program. In normal source code, only `app` and `rendering` should include `<raylib.h>`. Most direct drawing calls should eventually live in `rendering`, while `app` owns the window and main loop.
+raylib should stay at the edge of the program. In normal source code, only
+`app` and `rendering` should include `<raylib.h>`. Chart drawing belongs in
+`rendering`, app-level controls and status belong in `AppUi`, and `App` owns the
+window and main loop.
 
 ## Layer Responsibilities
 
@@ -190,8 +203,9 @@ inside it.
 
 The composition root.
 
-`App` owns the main loop and raylib boundary. `VisualizerSession` coordinates
-input generation, sorting, and animation without depending on raylib.
+`App` owns the main loop and window/frame boundary. `AppUi` owns raylib input,
+layout, and app-level drawing. `VisualizerSession` coordinates input
+generation, sorting, and animation without depending on raylib.
 
 `VisualizerSession` owns:
 
@@ -202,12 +216,19 @@ input generation, sorting, and animation without depending on raylib.
 
 `App.cpp` owns:
 
+- window creation and shutdown
+- app object construction
+- frame timing and the update/draw sequence
+
+`AppUi.cpp` owns:
+
 - app-level status and controls text
-- keyboard mappings for algorithm, value-spec, and initial-order selection
+- keyboard and future mouse mappings to session commands
 - screen layout and renderer calls
 
-Future controls should issue `VisualizerSession` commands rather than learning
-how input generation, sorting, or animation replay work.
+Future controls should stay behind `AppUi` and issue `VisualizerSession`
+commands rather than learning how input generation, sorting, or animation
+replay work.
 
 ### `testing`
 
@@ -294,7 +315,9 @@ The animation layer should replay `events`. The app and testing layer can inspec
 
 Before adding code to a file, ask:
 
-- Does this code know about raylib? Put it in `rendering` or, if it is window-loop setup, `app`.
+- Does this code draw sort bars? Put it in `rendering`.
+- Does this code poll UI input, calculate app layout, or draw controls and status? Put it in `AppUi`.
+- Does this code create the window or control frame lifetime? Put it in `App`.
 - Does this code decide how sorting works? Put it in `sorting`.
 - Does this code define how one event changes replay state or event position? Put it in `animation`.
 - Does this code decide play/pause, elapsed-frame timing, or playback speed? Put it in app-layer `VisualizerSession`.
@@ -306,15 +329,15 @@ Before adding code to a file, ask:
 ## Roadmap
 
 1. Build custom UI controls against the `VisualizerSession` boundary:
-   - keep keyboard and mouse input as thin translations into session commands
-   - keep app drawing grouped by purpose: controls, playback status, settings status, sort chart
+   - keep keyboard and mouse input in `AppUi` as thin translations into session commands
+   - keep `AppUi` drawing grouped by purpose: controls, playback status, settings status, sort chart
    - avoid letting buttons or sliders call input generation, sorting, or animation replay directly
 2. Turn the proven keyboard actions into simple custom UI controls:
    - buttons for algorithm, value-spec, initial-order, play/pause, reset, and apply
    - an item-count slider that edits `draftSettings` and marks settings dirty
    - later controls for seed, range values, unique-count, period length, and nearly-ascending disorder
 3. Continue refining the app layout boundary:
-   - keep app-owned panel rectangles explicit
+   - keep `AppUi`-owned panel rectangles explicit
    - keep layout debug drawing disabled by default
    - pass only the chart rectangle into the renderer for now
    - keep raylib drawing at the `app`/`rendering` edge

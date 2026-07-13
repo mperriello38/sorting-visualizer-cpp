@@ -21,6 +21,7 @@ add_executable(sorting_visualizer
 
     src/app/App.cpp
     src/app/VisualizerSession.cpp
+    src/app/AppUi.cpp
 
     src/input/InputGenerator.cpp
 

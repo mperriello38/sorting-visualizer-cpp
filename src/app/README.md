@@ -1,9 +1,10 @@
 # App Layer
 
 The app layer is the composition root and realtime control boundary for the
-visualizer. It is split into two cohesive modules:
+visualizer. It is split into three cohesive modules:
 
-- `App` owns raylib window setup, input polling, layout, and app-level drawing.
+- `App` owns raylib window setup, frame lifetime, and object composition.
+- `AppUi` owns raylib input polling, layout, and app-level drawing.
 - `VisualizerSession` owns non-graphical application state and behavior.
 
 The public entry point remains deliberately small:
@@ -42,30 +43,52 @@ It is not stored as a separate Boolean, so it cannot become stale.
 `VisualizerSession::update(frameTime)` receives elapsed time as ordinary data.
 It does not call raylib, which keeps playback policy deterministic and testable.
 
+## AppUi
+
+`AppUi` is the raylib-facing user-interface boundary. Its public interface is:
+
+```cpp
+class AppUi {
+public:
+    void handleInput(VisualizerSession& session);
+    void draw(
+        const VisualizerSession& session,
+        const RaylibRenderer& renderer) const;
+};
+```
+
+`handleInput()` translates keyboard and future mouse interactions into session
+commands. `draw()` calculates app layout, draws app-level controls and status,
+and delegates chart drawing to `RaylibRenderer`. Layout structures, key codes,
+display names, colors, and text helpers remain private to `AppUi.cpp`.
+
+`AppUi` does not own the session or renderer. `App` owns their lifetimes and
+passes references once per frame. This avoids hidden lifetime coupling while
+keeping the UI interface small.
+
 ## App.cpp
 
 `App.cpp` owns:
 
 - window creation and shutdown
-- keyboard and future mouse polling
-- translating input into `VisualizerSession` commands
-- keyboard-specific increments and default choices
-- screen and panel layout
-- title, controls, playback status, and settings-status drawing
-- passing `VisualizerSession::currentSortState()` to `RaylibRenderer`
+- construction of `VisualizerSession`, `RaylibRenderer`, and `AppUi`
+- frame timing and session updates
+- `BeginDrawing()` / `EndDrawing()` lifetime
 
 The main loop should remain easy to scan:
 
 ```text
-poll settings input
-poll playback input
+ask AppUi to handle input
 update the session with frame time
-draw the app
+open the frame
+ask AppUi to draw
+close the frame
 ```
 
-Raylib input helpers should stay thin. Future buttons and sliders should call
-the same session commands used by keyboard input instead of generating data,
-running algorithms, or manipulating `AnimationPlayer` directly.
+Raylib input helpers in `AppUi.cpp` should stay thin. Future buttons and sliders
+should call the same session commands used by keyboard input instead of
+generating data, running algorithms, or manipulating `AnimationPlayer`
+directly.
 
 ## Keyboard Controls
 
@@ -83,9 +106,15 @@ running algorithms, or manipulating `AnimationPlayer` directly.
 
 ```text
 App.cpp -> VisualizerSession
+App.cpp -> AppUi
 App.cpp -> RaylibRenderer
 App.cpp -> Domain
 App.cpp -> raylib
+
+AppUi -> VisualizerSession
+AppUi -> RaylibRenderer
+AppUi -> Domain
+AppUi -> raylib
 
 VisualizerSession -> Input
 VisualizerSession -> Sorting
@@ -102,8 +131,8 @@ VisualizerSession -> Domain
   and parameter controls will need one explicit validation policy.
 - Live preview while dragging a future item-count slider requires a deliberate
   policy. Editing draft settings and applying on release is the safe default.
-- Keep layout and input translation in `App.cpp`; do not move pixel geometry or
-  key codes into `VisualizerSession`.
+- Keep layout and input translation in `AppUi.cpp`; do not move pixel geometry
+  or key codes into `App.cpp` or `VisualizerSession`.
 - Do not split each control or state transition into its own shallow module.
-  Extract a UI-controls module only after buttons, sliders, and selectors reveal
-  a cohesive reusable abstraction.
+  Extract reusable widget machinery from `AppUi` only after buttons, sliders,
+  and selectors reveal a cohesive abstraction with state or policy to hide.

@@ -8,9 +8,13 @@
 
 namespace {
 
+// Playback-speed bounds are expressed in seconds per event. Smaller values are
+// faster, and the positive minimum prevents a zero-duration update loop.
 constexpr float maximumSecondsPerEvent = 1.0f;
 constexpr float minimumSecondsPerEvent = 0.0005f;
 
+// Limit catch-up work after a slow frame so playback cannot monopolize the UI
+// thread. Any remaining elapsed time stays in eventTimer_ for a later frame.
 constexpr unsigned int maximumEventsPerFrame = 50;
 
 }
@@ -31,9 +35,11 @@ void VisualizerSession::loadRun()
     // active run. This helper is the only place where the session needs to know
     // the sequence connecting input generation, sorting, and animation loading.
     std::vector<SortItem> items = generateInput(loadedSettings_.inputSpec);
-    
+
     SortTrace trace = runSort(loadedSettings_.algorithm, items);
-    
+
+    // The session needs the replay stream; final output and statistics remain
+    // available to sorting tests rather than becoming duplicate app state.
     player_.load(items, trace.events);
 }
 
@@ -222,6 +228,8 @@ void VisualizerSession::update(float frameTime)
 
     eventTimer_ += frameTime;
 
+    // Consume every event interval currently due, subject to the responsiveness
+    // cap. Subtracting intervals preserves fractional time between frames.
     while (
         eventTimer_ >= secondsPerEvent_ &&
         !player_.isComplete() &&

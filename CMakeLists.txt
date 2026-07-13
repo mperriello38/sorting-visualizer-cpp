@@ -37,6 +37,11 @@ add_executable(sorting_visualizer
 add_executable(sorting_tests
     src/testing/TestMain.cpp
     src/testing/SortTests.cpp
+    src/testing/TestSupport.cpp
+    src/testing/InputGeneratorTests.cpp
+    src/testing/SortingTests.cpp
+    src/testing/AnimationPlayerTests.cpp
+    src/testing/VisualizerSessionTests.cpp
 
     src/app/VisualizerSession.cpp
 

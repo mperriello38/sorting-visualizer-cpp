@@ -84,12 +84,13 @@ running algorithms, or manipulating `AnimationPlayer` directly.
 ```text
 App.cpp -> VisualizerSession
 App.cpp -> RaylibRenderer
+App.cpp -> Domain
 App.cpp -> raylib
 
-VisualizerSession -> input
-VisualizerSession -> sorting
-VisualizerSession -> animation
-VisualizerSession -> domain
+VisualizerSession -> Input
+VisualizerSession -> Sorting
+VisualizerSession -> Animation
+VisualizerSession -> Domain
 ```
 
 `VisualizerSession` must not include raylib or rendering headers.

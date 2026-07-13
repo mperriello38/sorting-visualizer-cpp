@@ -69,49 +69,11 @@ layout, and drawing, while `VisualizerSession` owns draft-vs-loaded settings,
 run regeneration, and playback state. The next major design pressure will come
 from custom buttons, sliders, and selectors rather than from the core layers.
 
-## Source Layout
+## Module Dependencies
 
-```text
-src/
-  main.cpp
-  app/
-    App.hpp
-    App.cpp
-    VisualizerSession.hpp
-    VisualizerSession.cpp
-    README.md
-  domain/
-    Algorithm.hpp
-    SortEvent.hpp
-    SortItem.hpp
-    SortSpec.hpp
-    SortState.hpp
-    README.md
-  input/
-    InputGenerator.hpp
-    InputGenerator.cpp
-    README.md
-  sorting/
-    SortRunner.hpp
-    SortRunner.cpp
-    SelectionSort.cpp
-    BubbleSort.cpp
-    InsertionSort.cpp
-    README.md
-  animation/
-    AnimationPlayer.hpp
-    AnimationPlayer.cpp
-    README.md
-  rendering/
-    RaylibRenderer.hpp
-    RaylibRenderer.cpp
-    README.md
-  testing/
-    TestMain.cpp
-    SortTests.hpp
-    SortTests.cpp
-    README.md
-```
+![Flow Chart of Dependencies](docs/media/Dependencies-Flow-Chart.png)
+
+An arrow from A to B means that A depends on B. Dashed arrows represent test-only dependencies.
 
 `build/` is generated output and should not be treated as source architecture.
 
@@ -120,21 +82,34 @@ src/
 The intended dependency direction is:
 
 ```text
-main -> app
+main -> App / UI loop
 
-app -> input
-app -> sorting
-app -> animation
-app -> rendering
-app -> domain
+App / UI loop -> Rendering
+App / UI loop -> VisualizerSession
+App / UI loop -> Raylib
+App / UI loop -> Domain
 
-input -> domain
-sorting -> domain
-animation -> domain
-rendering -> domain + raylib
-testing -> modules under test + domain
+Rendering -> Raylib
+Rendering -> Domain
 
-domain -> nothing project-specific
+VisualizerSession -> Domain
+VisualizerSession -> Input
+VisualizerSession -> Sorting
+VisualizerSession -> Animation
+
+Input -> Domain
+
+Sorting -> Domain
+
+Animation -> Domain
+
+Testing -> VisualizerSession
+Testing -> Input
+Testing -> Sorting
+Testing -> Animation
+Testing -> Domain
+
+Domain -> nothing project-specific
 ```
 
 raylib should stay at the edge of the program. In normal source code, only `app` and `rendering` should include `<raylib.h>`. Most direct drawing calls should eventually live in `rendering`, while `app` owns the window and main loop.

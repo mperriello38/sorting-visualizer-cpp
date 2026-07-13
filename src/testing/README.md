@@ -1,6 +1,8 @@
 # Testing Layer
 
-The testing layer contains development checks. These tests verify that low-level modules behave correctly, but they are not part of normal input generation, sorting, animation, or rendering.
+The testing layer contains development checks for input generation, sorting,
+animation replay, and app-layer session behavior. These tests are not part of
+normal input generation, sorting, animation, rendering, or app execution.
 
 Production code should not call into `testing`.
 
@@ -12,10 +14,11 @@ Current public test runner:
 TestReport runAllTests();
 ```
 
-`runAllTests()` is intentionally the only public entry point. The input,
-sorting, and animation suite runners are private implementation details inside
-`SortTests.cpp`. This keeps the testing module's interface small while allowing
-the implementation to stay organized by layer.
+`runAllTests()` is intentionally the only public entry point. Each suite has a
+separate implementation file, but its runner is declared only in
+`SortTests.cpp` instead of being exposed through `SortTests.hpp`. This keeps the
+testing module's interface small while allowing its implementation to follow
+the production-layer boundaries.
 
 `TestReport` contains both summary counts and failure details:
 
@@ -80,6 +83,22 @@ The case runner supplies the suite name, case name, check name, and severity.
 - app-layer `VisualizerSession`
 
 The private `addReport` helper merges summary counters and failure records.
+
+The implementation files are divided by responsibility:
+
+- `SortTests.hpp`: public report types and the `runAllTests()` declaration.
+- `TestMain.cpp`: console output and the test executable's exit status.
+- `SortTests.cpp`: combines suite reports behind `runAllTests()`.
+- `TestSupport.hpp/.cpp`: internal result recording and shared `SortState` comparisons.
+- `InputGeneratorTests.cpp`: input value and initial-order contracts.
+- `SortingTests.cpp`: sorting output, statistics, event replay, and stability contracts.
+- `AnimationPlayerTests.cpp`: event playback and seek behavior.
+- `VisualizerSessionTests.cpp`: app-level settings and realtime playback policy.
+
+Suite-local checks remain in unnamed namespaces. Shared support declarations
+stay in `TestSupport.hpp`, and suite-runner declarations stay in
+`SortTests.cpp`. Neither implementation interface is exposed through the
+public `SortTests.hpp` header.
 
 ## Input-Generator Tests
 
@@ -210,4 +229,6 @@ Tests may depend on the modules they test. That is not a dangerous dependency di
 
 The reverse direction would be dangerous: input, sorting, animation, rendering, and app code should not depend on `testing`.
 
-`sorting_visualizer` and `sorting_tests` are separate executables. The visualizer owns the raylib app path. The test runner owns `TestMain.cpp` and calls the public test functions.
+`sorting_visualizer` and `sorting_tests` are separate executables. The
+visualizer owns the raylib app path. The test runner owns `TestMain.cpp` and
+calls the public `runAllTests()` function.

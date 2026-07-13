@@ -8,8 +8,6 @@
 #include <variant>
 #include <vector>
 
-// Functions in this unnamed namespace are private to this .cpp file.
-// The only public function in this file is generateInput at the bottom.
 namespace {
 
 // =================================================================================
@@ -36,10 +34,8 @@ void requireValidRange(int minValue, int maxValue)
 // Sampling helper functions
 // =================================================================================
 
-// Returns a randomized integer vector containing NO DUPLICATES.
-// In statistics this is called sampling without replacement. It means when we draw a number from the set of allowed numbers
-// and we do not replace it in the set. All subsequent draws now see a set of allowed numbers which is smaller.
-// In this file it is used both for RequireUnique range inputs and for building the pool in FewUniqueValueSpec.
+// Samples distinct values from the inclusive range. This supports both
+// RequireUnique ranges and the distinct pool used by FewUniqueValueSpec.
 std::vector<int> sampleWithoutReplacement(
     int minValue,
     int maxValue,
@@ -54,7 +50,6 @@ std::vector<int> sampleWithoutReplacement(
     }
 
     std::vector<int> values;
-    // reserve allocates enough space for later push_back calls, but it does not create elements.
     values.reserve(static_cast<std::size_t>(valueCount));
 
     // First build every possible value in the allowed range.
@@ -70,9 +65,7 @@ std::vector<int> sampleWithoutReplacement(
     return values;
 }
 
-// Returns an integer vector of randomized values where duplicates are allowed.
-// This is called sampling with replacement in statistics.
-// Each draw is independent, so the same value can be chosen many times.
+// Samples independently from the inclusive range, so values may repeat.
 std::vector<int> sampleWithReplacement(
     int minValue,
     int maxValue,
@@ -82,7 +75,6 @@ std::vector<int> sampleWithReplacement(
     requireValidRange(minValue, maxValue);
 
     std::vector<int> values;
-    // reserve is a performance hint. It does not change values.size().
     values.reserve(itemCount);
 
     // uniform_int_distribution includes both endpoints: minValue and maxValue are both possible.
@@ -160,10 +152,8 @@ std::vector<int> generateValuesFromSpec(
     unsigned int itemCount,
     std::mt19937& generator)
 {
-    // Meaning:
-    // Choose exactly uniqueValueCount distinct values from the range.
-    // Guarantee each chosen value appears at least once.
-    // Fill the remaining slots randomly from that same small pool.
+    // The contract requires exactly uniqueValueCount distinct values, with each
+    // selected value represented at least once.
     if (valueSpec.uniqueValueCount <= 0) {
         throw std::invalid_argument("uniqueValueCount must be greater than 0.");
     }
@@ -226,11 +216,9 @@ std::vector<int> generateValuesFromSpec(
 
 std::vector<int> generateValues(const SortInputSpec& spec, std::mt19937& generator)
 {
-    // spec.valueSpec is a std::variant, so it contains exactly one of the ValueSpec structs.
-    // std::visit opens the variant and gives the active struct to the lambda below.
+    // Dispatch to the overload for the active ValueSpec without exposing the
+    // variant mechanics through the public generateInput interface.
     return std::visit(
-        // const auto& means "take whatever ValueSpec type is active, by const reference."
-        // If the active type is RangeValueSpec, this calls the RangeValueSpec overload above.
         [&](const auto& valueSpec) {
             return generateValuesFromSpec(valueSpec, spec.itemCount, generator);
         },
@@ -239,9 +227,7 @@ std::vector<int> generateValues(const SortInputSpec& spec, std::mt19937& generat
 }
 
 // ==========================================================================
-// Functions to apply the ordering spec
-// These are called by an overloaded function which dispatches the
-// appropriate order application function
+// Initial-order application
 // ==========================================================================
 
 void applyRandomOrder(std::vector<int>& values, std::mt19937& generator)
@@ -263,8 +249,7 @@ void applyDescendingOrder(std::vector<int>& values)
 // sort ascending, then apply a number of random swaps derived from disorderFraction.
 //
 // This does not guarantee that exactly disorderFraction of items end out of order.
-// If the project later needs a stricter meaning, change the input generator and
-// the matching tests together so the contract stays explicit.
+// Any stricter definition must update both generation and its contract tests.
 void applyNearlyAscendingOrder(
     std::vector<int>& values,
     const NearlyAscendingOrderSpec& orderSpec,
@@ -332,7 +317,6 @@ void applyInitialOrder(
     const InitialOrderSpec& initialOrderSpec,
     std::mt19937& generator)
 {
-    // This is the same variant pattern used for ValueSpec, but now for ordering.
     std::visit(
         [&](const auto& initialOrderSpec) {
             applyOrderFromSpec(initialOrderSpec, values, generator);
@@ -361,10 +345,10 @@ std::vector<SortItem> makeSortItems(const std::vector<int>& values)
 
 std::vector<SortItem> generateInput(const SortInputSpec& spec)
 {
-    // Create one seeded generator for this input run.
+    // One generator drives value creation and ordering, making the entire input
+    // deterministic for a fixed specification and seed.
     std::mt19937 generator(spec.seed);
 
-    // First generate values, then arrange them according to the requested initial order.
     std::vector<int> values = generateValues(spec, generator);
 
     applyInitialOrder(values, spec.initialOrderSpec, generator);

@@ -77,6 +77,7 @@ The case runner supplies the suite name, case name, check name, and severity.
 - input generation
 - sorting
 - animation
+- app-layer `VisualizerSession`
 
 The private `addReport` helper merges summary counters and failure records.
 
@@ -187,19 +188,21 @@ This test protects the event contract from the sorting side. Animation tests
 protect the same contract from the playback side. Together they keep rendering
 and app code from needing algorithm-specific assumptions.
 
-## Next Testing Work
+## VisualizerSession Tests
 
-The next required tests should be added alongside the next production boundary.
-For the current raylib renderer, that may only mean very small tests or no tests
-at first, because direct drawing is better verified visually in the early stage.
-Keep visual polish out of the test layer. App playback policy now lives in the
-pure C++ `VisualizerSession`, so it can be tested without opening a raylib
-window. The next useful tests include:
+App playback policy lives in the pure C++ `VisualizerSession`, so it can be
+tested without opening a raylib window. Current required checks cover:
 
-- pause means elapsed time does not advance events
-- play advances by the expected number of events for a given elapsed time
-- manual step while paused applies exactly one event
-- reset returns playback to frame zero and clears accumulated time
+- construction with a loaded deterministic run
+- draft isolation and reversible dirty state
+- item-count bounds and few-unique compatibility
+- applying draft settings as one explicit run transition
+- play/pause toggling
+- manual stepping changes exactly one event while paused and is ignored while playing
+- seeking pauses playback, reaches valid positions, and clamps past the end
+- elapsed frame time accumulates, advances multiple due events, and does nothing while paused or complete
+- speed changes preserve positive bounded event durations and saturate at both limits
+- reset restores frame zero and visual state, clears completion, pauses, and preserves the loaded trace
 
 ## Design Notes
 

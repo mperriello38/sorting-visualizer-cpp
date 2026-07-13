@@ -35,8 +35,8 @@ struct DescendingOrderSpec {
     bool operator==(const DescendingOrderSpec&) const = default;
 };
 
-// Almost perfectly ascending.
-// disorderFraction controls how many random swaps are applied after sorting ascending.
+// Ascending values with random swap attempts derived from disorderFraction.
+// The fraction does not promise an exact final proportion of displaced items.
 struct NearlyAscendingOrderSpec {
     double disorderFraction;
 
@@ -115,12 +115,7 @@ using ValueSpec = std::variant<
     PeriodicValueSpec
 >;
 
-// Input specification data type.
-// Contains:
-// itemCount
-// valueSpec    - How should the input values be generated?
-// initialOrderSpec     - How should the input values be ordered?
-// seed
+// Complete, renderer-independent description of a generated input.
 struct SortInputSpec {
     unsigned int itemCount;
     ValueSpec valueSpec;

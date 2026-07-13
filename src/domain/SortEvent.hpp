@@ -11,10 +11,6 @@
 // that are meaningful for that event. This avoids one generic "event" struct with
 // unused fields and hidden agreements.
 
-// Critical definition: event-index means "the next event that will be applied."
-// If nextEventIndex_ is 0, no events have been applied yet.
-// If nextEventIndex_ equals events_.size(), playback is complete.
-
 // Event replay contract:
 //
 // CompareEvent:
@@ -37,13 +33,13 @@
 // Comparing, Swapping, Moving = transient states for the most recent event.
 // Sorted = persistent state that should remain visible after later events.
 
-// Compare SortItems at leftIndex and rightIndex.
+// Record a comparison between the items at two current indices.
 struct CompareEvent {
     int leftIndex;
     int rightIndex;
 };
 
-// Swap SortItems at leftIndex and rightIndex.
+// Exchange the items at two current indices.
 struct SwapEvent {
     int leftIndex;
     int rightIndex;

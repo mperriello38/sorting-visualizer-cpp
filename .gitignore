@@ -1,6 +1,5 @@
 # CMake build output
 build/
-buil/
 cmake-build-*/
 
 # Compiled binaries and debug files

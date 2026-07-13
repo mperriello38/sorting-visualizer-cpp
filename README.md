@@ -4,6 +4,10 @@ A real-time sorting algorithm visualizer written in C++20 with raylib.
 
 The application separates input generation, sorting, event replay, animation, and rendering so that sorting behavior can be tested independently of the graphical interface. Each algorithm produces a replayable event trace that drives the visualization and supports automated correctness checks. The current version includes bubble sort, insertion sort, selection sort, configurable input generation, playback controls, and a keyboard-driven interface.
 
+## Platform Support
+
+- **Windows:** Full support. Build and run the visualizer application.
+- **Linux/macOS:** Build and run tests only (no graphical display support configured currently).
 
 ## Demo
 
@@ -47,7 +51,7 @@ The project currently has:
 
 - a domain model for algorithms, sortable items, sort specs, sort events, and visualizable sort state
 - an input generator that creates `std::vector<SortItem>` from `SortInputSpec`
-- input-generator and sorting tests that validate fixed development cases through the `sorting_tests` console runner with failure details
+- input-generator, sorting, animation, and `VisualizerSession` tests that run through the `sorting_tests` console runner with failure details
 - stability checks for sorting algorithms, recorded as required for stable algorithms and diagnostic for naturally unstable algorithms
 - event replay checks that verify `SortTrace::events` can reconstruct `SortTrace::finalItems`
 - a sorting layer with bubble sort, insertion sort, and selection sort implemented as pure event-producing algorithms
@@ -317,7 +321,8 @@ Before adding code to a file, ask:
 
 - Does this code know about raylib? Put it in `rendering` or, if it is window-loop setup, `app`.
 - Does this code decide how sorting works? Put it in `sorting`.
-- Does this code decide how time advances? Put it in `animation`.
+- Does this code define how one event changes replay state or event position? Put it in `animation`.
+- Does this code decide play/pause, elapsed-frame timing, or playback speed? Put it in app-layer `VisualizerSession`.
 - Does this code define shared concepts? Put it in `domain`.
 - Does this code generate starting data? Put it in `input`.
 - Does this code verify behavior for development? Put it in `testing`.

@@ -102,6 +102,7 @@ Defines the current visualizable state of the run.
 - `domain` should not include `<raylib.h>`.
 - `domain` should not contain drawing, window, keyboard, mouse, random-generation, test, or algorithm implementation code.
 - If a concept is only about colors, pixels, or layout, it belongs in `rendering`.
-- If a concept is only about time and playback, it belongs in `animation`.
+- Event replay state and event-position behavior belong in `animation`.
+- Realtime play/pause, speed, and frame-time policy belong in app-layer `VisualizerSession`.
 - If a concept is only about how an algorithm works, it belongs in `sorting`.
 - If a concept is about generating starting values from a `SortInputSpec`, it belongs in `input`.

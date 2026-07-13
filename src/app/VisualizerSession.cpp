@@ -43,15 +43,11 @@ void VisualizerSession::loadRun()
 
 const SortRunSpec& VisualizerSession::draftSettings() const
 {
-    // Return a const reference so the UI can display draft settings without
-    // copying them or bypassing the session's setting-change functions.
     return draftSettings_;
 }
 
 const SortRunSpec& VisualizerSession::loadedSettings() const
 {
-    // Loaded settings describe the input and algorithm used by the active
-    // animation trace.
     return loadedSettings_;
 }
 
@@ -100,22 +96,16 @@ std::size_t VisualizerSession::eventCount() const
 
 void VisualizerSession::setDraftAlgorithm(Algorithm algorithm)
 {
-    // Change only the draft algorithm. The loaded trace must remain unchanged
-    // until applyDraftSettings() is called.
     draftSettings_.algorithm = algorithm;
 }
 
 void VisualizerSession::setDraftValueSpec(ValueSpec valueSpec)
 {
-    // Replace only the draft value specification. This function should not
-    // generate input or modify the currently loaded animation.
     draftSettings_.inputSpec.valueSpec = valueSpec;
 }
 
 void VisualizerSession::setDraftOrderSpec(InitialOrderSpec orderSpec)
 {
-    // Replace only the draft ordering specification. Applying the draft later
-    // will regenerate the active run with this ordering.
     draftSettings_.inputSpec.initialOrderSpec = orderSpec;
 }
 
@@ -186,8 +176,7 @@ void VisualizerSession::resetPlayback()
 
 void VisualizerSession::stepForward()
 {
-    // Apply exactly one event when manual stepping is allowed. The final policy
-    // should make the behavior while already playing explicit.
+    // Manual stepping is intentionally ignored during automatic playback.
     if (!playing_) {
         player_.stepForward();
     }
@@ -204,8 +193,8 @@ void VisualizerSession::stepBackward()
 
 void VisualizerSession::seekToEventPosition(std::size_t position)
 {
-    // Ask AnimationPlayer to seek to the requested event position. This is the
-    // command that a future timeline slider will use.
+    // Seeking is an explicit manual action, so it also pauses playback and
+    // discards partial timing from the previous position.
     playing_ = false;
     eventTimer_ = 0.0f;
     player_.seekToEventPosition(position);

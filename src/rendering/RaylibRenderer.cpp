@@ -12,7 +12,6 @@ namespace {
 // colors represent comparing, swapping, moving, or sorted items.
 Color colorForVisualState(ItemVisualState visualState)
 {
-    // switch chooses one branch based on the enum value.
     // This is rendering policy: the domain says "Comparing"; rendering decides
     // that "Comparing" should be drawn as GOLD.
     switch (visualState) {
@@ -44,10 +43,7 @@ void RaylibRenderer::drawSortState(const SortState& state, Rectangle chartBounds
     // App owns BeginDrawing(), ClearBackground(), and EndDrawing().
     // This function assumes raylib is already inside an active drawing frame.
 
-    // If there are no items, there is no bar geometry to calculate.
     if (state.items.empty()) {
-        // DrawText(text, x, y, fontSize, color)
-        // raylib positions are pixels measured from the top-left corner.
         DrawText("No items to draw.", 40, 120, 20, GRAY);
         return;
     }
@@ -74,8 +70,7 @@ void RaylibRenderer::drawSortState(const SortState& state, Rectangle chartBounds
         static_cast<int>(chart.height),
         LIGHTGRAY);
 
-    // Convert item count to float for pixel layout math.
-    // The empty-state check above guarantees itemCount is not zero.
+    // The empty-state guard above makes this division safe.
     const int itemCount = static_cast<int>(state.items.size());
     const float slotWidth = chart.width / static_cast<float>(itemCount);
 
@@ -84,16 +79,13 @@ void RaylibRenderer::drawSortState(const SortState& state, Rectangle chartBounds
     const float barWidth = slotWidth * 0.8f;
 
     for (int index = 0; index < itemCount; ++index) {
-        // std::vector indexing uses std::size_t. The loop index is int because
-        // raylib drawing functions also use int pixel coordinates.
         const SortItemState& itemState = state.items[static_cast<std::size_t>(index)];
 
-        // This first renderer treats nonpositive values as zero-height bars.
-        // Later, negative values should be handled with a visible zero baseline.
+        // The current chart has no zero baseline, so nonpositive values map to
+        // zero-height bars rather than using misleading negative geometry.
         const int positiveValue = std::max(0, itemState.item.value);
         const float normalizedHeight = static_cast<float>(positiveValue) / static_cast<float>(maxValue);
 
-        // Convert the normalized 0.0 -> 1.0 height into screen pixels.
         const int barHeight = static_cast<int>(normalizedHeight * chart.height);
 
         // raylib coordinates:

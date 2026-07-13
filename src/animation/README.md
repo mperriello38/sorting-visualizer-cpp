@@ -34,9 +34,9 @@ step one event at a time, move backward, seek to a playback position, reset
 playback, and ask whether replay is complete.
 
 Real-time controls such as play, pause, speed, elapsed-frame timing, and the
-per-frame event cap currently live in `App.cpp` for the first raylib vertical
-slice. If that logic grows, it should be moved behind a small playback interface
-that still calls this step-based core.
+per-frame event cap live in the app-layer `VisualizerSession`. That class calls
+this step-based core without exposing raylib to animation or playback policy to
+rendering.
 
 ## Responsibilities
 
@@ -196,8 +196,8 @@ The next animation-related work is not more event replay behavior. The core is
 already tested. The next pressure will come from app controls:
 
 - pause/play should remain responsive and predictable
-- speed and per-frame event limits should remain explicit app policy instead of
-  scattered numbers
+- speed and per-frame event limits should remain explicit `VisualizerSession`
+  policy instead of scattered numbers
 - a future timeline slider should call `seekToEventPosition` rather than
   manipulating event indices itself
 - checkpoint-based seeking should be added only if replay-from-start becomes a

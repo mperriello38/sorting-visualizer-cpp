@@ -100,7 +100,7 @@ namespace {
 // Keyboard-specific settings policy
 //
 // VisualizerSession owns settings validity and state transitions. These helpers
-// only translate keyboard-friendly changes into exact session commands.
+// only translate keyboard-friendly changes into session commands.
 // =================================================================================
 
     unsigned int keyboardItemCountStride(unsigned int itemCount)
@@ -153,7 +153,7 @@ namespace {
 // Input polling
 //
 // These helpers translate raylib keyboard state into app actions. They should stay
-// thin so future mouse/UI controls can reuse the same actions above.
+// thin so future mouse/UI controls can issue the same session commands.
 // =================================================================================
 
     void handleItemCountInput(VisualizerSession& session)
@@ -230,8 +230,8 @@ namespace {
         }
 
         if (IsKeyPressed(KEY_ZERO)) {
-            // Temporary app default: "near" means 10% swap pressure after
-            // ascending order. A future slider could edit this field directly.
+            // Keyboard policy: "near" means 10% swap pressure after ascending
+            // order. A parameter control can eventually replace this fixed value.
             session.setDraftOrderSpec(NearlyAscendingOrderSpec{0.10});
         }
     }
@@ -739,9 +739,7 @@ namespace {
 
 void App::run()
 {
-    // Start in a resizable window so the layout can adapt to different display
-    // sizes. Borderless/fullscreen presentation can be enabled later without
-    // changing the layout helpers.
+    // A resizable window exercises the same layout path across display sizes.
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(1280, 720, "Sorting Visualizer");
     SetWindowMinSize(800, 450);
